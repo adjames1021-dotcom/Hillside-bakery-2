@@ -1,0 +1,337 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Hillside Bakery</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&display=swap">
+<style>
+/* Layout: full-bleed diorama canvas, a floating pill HUD on top, speech bubbles
+   anchored to the 3D world, and one recipe-book sheet. Single warm theme. */
+:root {
+  --ink: #4B2E1D;
+  --cream: #F8E8C8;
+  --cream2: #FFF3DC;
+  --bg: #F9E2C8;
+  --orange: #F4A646;
+  --pumpkin: #E8893A;
+  --pink: #F7B9C4;
+  --sage: #AFCB9C;
+  --blue: #AFD6EC;
+  --butter: #FFE08A;
+  --font: "Fredoka", "Baloo 2", "Nunito", "Trebuchet MS", system-ui, sans-serif;
+  color-scheme: light;
+}
+[hidden] { display: none !important; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font);
+  font-size: 16px;
+  overflow: hidden;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+#app { position: fixed; inset: 0; overflow: hidden; }
+#scene { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+
+/* ------------------------------------------------ buttons & pills */
+.btn {
+  font: 600 15px/1 var(--font);
+  color: var(--ink);
+  background: var(--cream2);
+  border: 3px solid var(--ink);
+  border-radius: 999px;
+  padding: 10px 16px 9px;
+  box-shadow: 0 4px 0 var(--ink);
+  cursor: pointer;
+  transition: transform .08s ease, box-shadow .08s ease, background .15s;
+  white-space: nowrap;
+}
+.btn:hover { background: #fff8ea; }
+.btn:active { transform: translateY(3px); box-shadow: 0 1px 0 var(--ink); }
+.btn:focus-visible { outline: 3px solid var(--pumpkin); outline-offset: 3px; }
+.btn.primary { background: var(--orange); }
+.btn.primary:hover { background: #F7B25C; }
+.btn.big { font-size: 20px; padding: 14px 28px 13px; }
+.pill {
+  display: inline-flex; align-items: center; gap: 8px;
+  background: var(--cream2);
+  border: 3px solid var(--ink);
+  border-radius: 999px;
+  padding: 6px 14px 6px 8px;
+  box-shadow: 0 4px 0 var(--ink);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.pill b { font-size: 18px; min-width: 2ch; }
+.pill small { font-size: 13px; font-weight: 500; opacity: .8; }
+.pill.bump { animation: bump .45s ease; }
+@keyframes bump { 30% { transform: scale(1.15) rotate(-3deg); } 60% { transform: scale(.96); } }
+.coin-ico, .heart-ico { width: 24px; height: 24px; flex: none; display: inline-block; }
+.coin-ico { border-radius: 50%; background: #FFC940; border: 3px solid var(--ink); box-shadow: inset -3px -3px 0 #E8A93A; box-sizing: border-box; }
+.heart-ico {
+  background: no-repeat center/contain url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cpath d='M50 86C8 58 12 22 34 18c9-2 14 4 16 10 2-6 7-12 16-10 22 4 26 40-16 68z' fill='%23F28AA0' stroke='%234B2E1D' stroke-width='8' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+
+/* ------------------------------------------------ HUD */
+.hud {
+  position: absolute; left: 0; right: 0; top: 0;
+  padding: calc(12px + env(safe-area-inset-top, 0px)) 16px 0;
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  pointer-events: none;
+}
+.hud > * { pointer-events: auto; }
+.hud .spacer { flex: 1; }
+.hud .btn { padding: 9px 14px 8px; font-size: 14px; }
+
+.hold {
+  position: absolute; left: 16px; bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  display: flex; align-items: center; gap: 10px;
+  background: var(--cream2); border: 3px solid var(--ink); border-radius: 22px;
+  box-shadow: 0 4px 0 var(--ink);
+  padding: 6px 14px 6px 6px;
+  max-width: calc(100% - 32px);
+}
+.hold img { width: 58px; height: 58px; flex: none; }
+.hold-name { font-weight: 600; font-size: 17px; }
+.steps { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-top: 4px; }
+.step { font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 999px; border: 2px solid var(--ink); background: #fff; opacity: .55; }
+.step.done { background: var(--sage); opacity: 1; text-decoration: line-through; text-decoration-thickness: 2px; }
+.step.now { background: var(--butter); opacity: 1; }
+.step.ready { background: var(--orange); opacity: 1; margin-left: 4px; }
+.arrow { font-weight: 700; opacity: .6; }
+
+.hint {
+  position: absolute; left: 50%; bottom: calc(22px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%);
+  font-weight: 600; font-size: 15px; padding: 6px 14px; border-radius: 999px;
+  background: rgba(255, 243, 220, .85); border: 2px solid rgba(75, 46, 29, .35);
+  pointer-events: none; white-space: nowrap;
+}
+.hint:empty { display: none; }
+.toast {
+  position: absolute; left: 50%; top: calc(76px + env(safe-area-inset-top, 0px));
+  transform: translate(-50%, -12px); opacity: 0;
+  background: var(--cream2); border: 3px solid var(--ink); border-radius: 18px;
+  padding: 8px 16px; font-weight: 600; font-size: 15px; box-shadow: 0 4px 0 var(--ink);
+  transition: opacity .2s, transform .25s cubic-bezier(.3, 1.6, .5, 1);
+  pointer-events: none; max-width: min(520px, calc(100% - 32px)); text-align: center; text-wrap: balance;
+}
+.toast.show { opacity: 1; transform: translate(-50%, 0); }
+.toast.good { background: #E4F0D8; }
+.toast.sad { background: #F6E3DA; }
+.toast.unlock { background: var(--butter); font-size: 17px; }
+
+/* ------------------------------------------------ world bubbles */
+#labels { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+.bubble {
+  position: absolute; left: 0; top: 0;
+  background: var(--cream2); border: 3px solid var(--ink); border-radius: 18px;
+  font-weight: 600; white-space: nowrap;
+  will-change: transform;
+}
+.bubble::after {
+  content: ""; position: absolute; left: 50%; bottom: -9px; width: 12px; height: 12px;
+  background: inherit; border-right: 3px solid var(--ink); border-bottom: 3px solid var(--ink);
+  transform: translateX(-50%) rotate(45deg); border-bottom-right-radius: 3px;
+}
+.bubble.order { padding: 4px 6px 8px; display: grid; justify-items: center; gap: 3px; margin-top: -10px; }
+.bubble.order img { width: 54px; height: 54px; display: block; }
+.bubble.order .bar { width: 50px; height: 8px; border-radius: 99px; border: 2px solid var(--ink); background: #fff; overflow: hidden; display: block; }
+.bubble.order .bar i { display: block; height: 100%; background: var(--sage); border-radius: 99px; }
+.bubble.order.low .bar i { background: var(--pumpkin); }
+.bubble.order.low { animation: wiggle 1s ease-in-out infinite; }
+@keyframes wiggle { 0%, 100% { rotate: 0deg; } 25% { rotate: -4deg; } 75% { rotate: 4deg; } }
+.bubble.tag { padding: 5px 12px 5px 6px; font-size: 14px; display: flex; align-items: center; gap: 7px; background: #fff8ea; }
+.bubble.tag::after { top: -9px; bottom: auto; transform: translateX(-50%) rotate(225deg); }
+kbd {
+  font: 700 12px/1 var(--font); display: inline-grid; place-items: center;
+  min-width: 22px; height: 22px; padding: 0 4px; box-sizing: border-box;
+  border: 2px solid var(--ink); border-radius: 7px; background: var(--orange); box-shadow: 0 2px 0 var(--ink);
+}
+.bubble.prog { padding: 4px 10px 4px 4px; display: flex; align-items: center; gap: 6px; font-size: 13px; margin-top: -8px; }
+.bubble.prog svg { width: 30px; height: 30px; transform: rotate(-90deg); }
+.bubble.prog circle { fill: none; stroke-width: 7; }
+.bubble.prog .track { stroke: #F3DEC0; }
+.bubble.prog .fill { stroke: var(--orange); stroke-dasharray: 106.8; stroke-dashoffset: 106.8; stroke-linecap: round; }
+.bubble.prog.ready { background: var(--butter); animation: hopb .8s ease-in-out infinite; }
+.bubble.prog.ready .fill { stroke: var(--sage); }
+@keyframes hopb { 50% { margin-top: -14px; } }
+
+/* ------------------------------------------------ recipe book */
+.modal {
+  position: absolute; inset: 0; display: grid; place-items: center;
+  background: rgba(120, 70, 40, .28);
+  padding: calc(16px + env(safe-area-inset-top, 0px)) 16px calc(16px + env(safe-area-inset-bottom, 0px));
+}
+.sheet {
+  width: min(920px, 100%); max-height: 100%; box-sizing: border-box;
+  display: flex; flex-direction: column;
+  background: var(--cream2); border: 4px solid var(--ink); border-radius: 28px; box-shadow: 0 8px 0 var(--ink);
+  overflow: hidden;
+}
+.sheet-head { display: flex; align-items: flex-start; gap: 12px; padding: 18px 20px 10px; background: var(--cream); border-bottom: 3px solid var(--ink); }
+.sheet-head h2 { margin: 0; font-size: 28px; font-weight: 700; line-height: 1.1; }
+.sheet-head p { margin: 4px 0 0; font-size: 15px; opacity: .8; }
+.sheet-head .btn { margin-left: auto; }
+.tabs { display: flex; gap: 8px; padding: 12px 20px 8px; overflow-x: auto; scrollbar-width: thin; flex: none; }
+.tab {
+  font: 600 14px/1 var(--font); color: var(--ink); cursor: pointer; white-space: nowrap;
+  border: 3px solid var(--ink); border-radius: 999px; padding: 8px 12px 7px; background: #fff;
+  box-shadow: 0 3px 0 var(--ink);
+}
+.tab.on { background: var(--tab, var(--orange)); }
+.tab.locked { opacity: .5; }
+.tab:focus-visible { outline: 3px solid var(--pumpkin); outline-offset: 2px; }
+.count { display: inline-grid; place-items: center; min-width: 20px; height: 20px; margin-left: 6px; border-radius: 99px; background: var(--ink); color: var(--cream2); font-size: 12px; }
+.grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(168px, 1fr)); gap: 12px;
+  padding: 10px 20px 22px; overflow-y: auto; min-height: 200px;
+}
+.card {
+  position: relative; display: grid; justify-items: center; align-content: start; gap: 4px; text-align: center;
+  font-family: var(--font); color: var(--ink); cursor: pointer;
+  background: #fff; border: 3px solid var(--ink); border-radius: 20px; padding: 10px 10px 12px;
+  box-shadow: 0 4px 0 var(--ink); transition: transform .1s;
+}
+.card:hover { transform: translateY(-2px) rotate(-.6deg); background: #FFFBF3; }
+.card:active { transform: translateY(3px); box-shadow: 0 1px 0 var(--ink); }
+.card:focus-visible { outline: 3px solid var(--pumpkin); outline-offset: 3px; }
+.card img { width: 84px; height: 84px; }
+.card-name { font-weight: 600; font-size: 16px; line-height: 1.15; text-wrap: balance; }
+.card-desc { font-size: 12.5px; line-height: 1.3; opacity: .78; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.route { margin-top: 2px; font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 99px; background: var(--cream); }
+.card.locked { cursor: not-allowed; background: #FBF1E2; }
+.card.locked .card-name { opacity: .6; }
+.badge {
+  position: absolute; top: -10px; right: 10px; font-size: 12px; font-weight: 700; padding: 3px 9px;
+  border: 2px solid var(--ink); border-radius: 99px; background: var(--pink);
+}
+.empty { grid-column: 1 / -1; text-align: center; font-size: 16px; opacity: .75; padding: 30px 0; }
+
+/* ------------------------------------------------ title */
+.title {
+  position: absolute; inset: 0; display: grid; place-items: center; padding: 16px;
+  background: radial-gradient(closest-side, rgba(249, 226, 200, .2), rgba(249, 226, 200, .75));
+}
+.title-card {
+  width: min(460px, 100%); box-sizing: border-box; text-align: center;
+  background: var(--cream2); border: 4px solid var(--ink); border-radius: 32px; box-shadow: 0 8px 0 var(--ink);
+  padding: 26px 24px 28px;
+}
+.eyebrow { margin: 0; font-size: 14px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--pumpkin); }
+.title h1 {
+  margin: 4px 0 6px; font-size: clamp(38px, 9vw, 56px); line-height: 1; font-weight: 700; letter-spacing: -.01em;
+  color: var(--cream2); -webkit-text-stroke: 7px var(--ink); paint-order: stroke fill;
+  text-shadow: 0 5px 0 var(--ink); text-wrap: balance;
+}
+.title h1 span { color: var(--orange); }
+.lede { margin: 0 auto 16px; font-size: 17px; line-height: 1.4; max-width: 34ch; }
+.keys { list-style: none; margin: 0 0 20px; padding: 0; display: flex; flex-wrap: wrap; justify-content: center; gap: 8px 14px; font-size: 14px; font-weight: 500; }
+.keys li { display: flex; align-items: center; gap: 5px; }
+
+/* ------------------------------------------------ touch */
+.touch { display: none; }
+@media (pointer: coarse) {
+  .touch { display: block; }
+  .stick {
+    position: absolute; left: 20px; bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+    width: 128px; height: 128px; border-radius: 50%;
+    background: rgba(255, 243, 220, .7); border: 3px solid var(--ink); touch-action: none;
+  }
+  .knob {
+    position: absolute; left: 50%; top: 50%; width: 56px; height: 56px; margin: -28px 0 0 -28px; border-radius: 50%;
+    background: var(--orange); border: 3px solid var(--ink); box-shadow: 0 4px 0 var(--ink); pointer-events: none;
+  }
+  .use { position: absolute; right: 20px; bottom: calc(40px + env(safe-area-inset-bottom, 0px)); width: 92px; height: 92px; padding: 0; font-size: 20px; }
+  .hold { bottom: calc(168px + env(safe-area-inset-bottom, 0px)); }
+  .hint { bottom: calc(160px + env(safe-area-inset-bottom, 0px)); }
+  .keys { display: none; }
+  kbd { display: none; }
+  .bubble.tag { padding-left: 12px; }
+}
+@media (max-width: 560px) {
+  .hud { gap: 8px; }
+  .hud .btn { font-size: 13px; padding: 8px 11px 7px; }
+  .pill small { display: none; }
+  .hint { font-size: 13px; }
+  .grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); padding: 10px 14px 18px; }
+  .sheet-head { padding: 14px 14px 10px; }
+  .tabs { padding: 12px 14px 8px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .bubble.order.low, .bubble.prog.ready, .pill.bump { animation: none; }
+}
+</style>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+</head>
+<body>
+<div id="app">
+  <canvas id="scene" aria-label="A tiny isometric bakery"></canvas>
+  <div id="labels" aria-hidden="true"></div>
+
+  <header class="hud">
+    <div class="pill" id="coinPill" title="Coins"><span class="coin-ico" aria-hidden="true"></span><b id="coins">0</b></div>
+    <div class="pill" title="Treats served"><span class="heart-ico" aria-hidden="true"></span><b id="served">0</b><small>served</small></div>
+    <div class="spacer"></div>
+    <button class="btn" id="bookBtn" type="button">Recipes</button>
+    <button class="btn" id="viewBtn" type="button" aria-pressed="false">Baker's eyes</button>
+    <button class="btn" id="muteBtn" type="button">Sound on</button>
+  </header>
+
+  <div class="hold" id="hold" hidden>
+    <img id="holdImg" alt="">
+    <div><div class="hold-name" id="holdName"></div><div class="steps" id="holdSteps"></div></div>
+  </div>
+  <div class="hint" id="hint" aria-live="polite"></div>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <div class="touch" id="touch">
+    <div class="stick" id="stick"><div class="knob" id="knob"></div></div>
+    <button class="btn primary use" id="useBtn" type="button">Use</button>
+  </div>
+
+  <div class="modal" id="book" hidden>
+    <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="bookTitle">
+      <div class="sheet-head">
+        <div>
+          <h2 id="bookTitle">Recipe Book</h2>
+          <p id="bookSub"></p>
+        </div>
+        <button class="btn" id="bookClose" type="button">Close</button>
+      </div>
+      <div class="tabs" id="tabs" role="tablist"></div>
+      <div class="grid" id="grid"></div>
+    </div>
+  </div>
+
+  <div class="title" id="title">
+    <div class="title-card">
+      <p class="eyebrow">A tiny shop on the hill</p>
+      <h1>Hillside <span>Bakery</span></h1>
+      <p class="lede">Bake pies, cakes, cookies and sundaes for your cat, bunny, bear and puppy regulars.</p>
+      <ul class="keys">
+        <li><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> walk</li>
+        <li><kbd>E</kbd> use</li>
+        <li><kbd>R</kbd> recipes</li>
+        <li><kbd>V</kbd> baker's eyes</li>
+      </ul>
+      <button class="btn primary big" id="startBtn" type="button">Open the shop</button>
+    </div>
+  </div>
+</div>
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>
