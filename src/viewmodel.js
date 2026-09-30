@@ -66,9 +66,9 @@ export class ViewModel {
     // portrait screens are narrow, so widen the paws' camera to keep them small
     this.camera.fov = aspect < 1 ? 58 + (1 - aspect) * 50 : 58;
     this.camera.updateProjectionMatrix();
-    this.phase += dt * (moving ? 9 + speed : 1.6);
-    const bobY = moving ? Math.abs(Math.sin(this.phase)) * 0.018 : Math.sin(this.phase) * 0.004;
-    const swayX = moving ? Math.sin(this.phase * 0.5) * 0.012 : 0;
+    this.phase += dt * (moving ? 6 + speed : 1.6);
+    const bobY = moving ? Math.abs(Math.sin(this.phase)) * 0.006 : Math.sin(this.phase) * 0.003;
+    const swayX = moving ? Math.sin(this.phase * 0.5) * 0.004 : 0;
     this.root.position.set(swayX, -bobY, 0);
     this.reach = Math.max(0, this.reach - dt * 4);
     this.lift = Math.max(0, this.lift - dt * 3);

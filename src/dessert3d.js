@@ -777,26 +777,119 @@ export function dessertModel(d, state = {}) {
   return master.clone();
 }
 
-/** The mixing bowl you carry while gathering: ingredient bits, or batter once mixed. */
-export function bowlModel(bits = [], batter = null) {
+// How each ingredient looks once it's tipped into the mixing bowl.
+const BIT = {
+  flour: ['mound', '#FFF8EC'], sugar: ['cubes', '#FFFFFF', 0.018], oats: ['flakes', '#E6CC9C'], bread: ['cubes', '#E9A95A', 0.026],
+  chocolate: ['cubes', '#5A3422', 0.022], graham: ['cubes', '#E3AE6B', 0.024], 'crispy-rice': ['flakes', '#F0D08E'],
+  marshmallows: ['puffs', '#FFFBF0'], coconut: ['flakes', '#FFFBF0'], cinnamon: ['sticks', '#A8612E'], nuts: ['nuts', '#95512A'],
+  raisins: ['berries', '#6E3A3A', 0.011], caramel: ['liquid', '#D9822F'], 'peanut-butter': ['dollop', '#D9A05B'],
+  apples: ['chunks', '#F7E6A8', '#E4605E'], peaches: ['chunks', '#F9CB94', '#F6A57A'], bananas: ['slices', '#FFF0B3'],
+  pumpkin: ['dollop', '#E8893A'], 'sweet-potato': ['dollop', '#D9824A'], pineapple: ['chunks', '#FFE27A', '#F2B84A'],
+  carrots: ['shreds', '#F4A646'], milk: ['liquid', '#EEF4EE'], cream: ['liquid', '#FFF3E6'], 'root-beer': ['liquid', '#8A4A22'],
+  butter: ['cubes', '#FFE27A', 0.028], eggs: ['egg'], 'cream-cheese': ['dollop', '#FFF6E4'], strawberries: ['strawberries'],
+  blueberries: ['berries', '#6D63B5', 0.013], cherries: ['berries', '#D8404E', 0.016], lemons: ['slices', '#FFE066'],
+  limes: ['slices', '#9DC25A'], 'ice-cream': ['scoop', '#F9C8D0'],
+};
+
+function addBit(g, id, x, y, z, rand) {
+  const [kind, col, extra] = BIT[id] || ['mound', '#FFF3DC'];
+  const at = (m, dx = 0, dy = 0, dz = 0) => add(g, m, x + dx, y + dy, z + dz);
+  const ring = (n, r, fn) => { for (let i = 0; i < n; i++) { const a = (i / n) * TAU + rand(); fn(Math.cos(a) * r, Math.sin(a) * r, i); } };
+  if (kind === 'mound') {
+    const m = at(part(G.sphere(0.036, 14, 10), col, 'thin'));
+    m.scale.y = 0.55;
+    const tip = at(part(G.sphere(0.018, 10, 8), col, false), 0, 0.016, 0);
+    tip.scale.y = 0.7;
+  } else if (kind === 'cubes') {
+    const size = extra || 0.02;
+    ring(3, 0.018, (dx, dz) => {
+      const c = at(part(G.box(size, size, size, size * 0.2), col, 'thin'), dx, size / 2, dz);
+      c.rotation.set(rand() * 0.6, rand() * 3, rand() * 0.6);
+    });
+  } else if (kind === 'flakes') {
+    for (let i = 0; i < 9; i++) {
+      const f = at(part(G.sphere(0.009, 6, 4), col, false), (rand() - 0.5) * 0.05, 0.004 + rand() * 0.01, (rand() - 0.5) * 0.05);
+      f.scale.set(1.4, 0.4, 1);
+    }
+  } else if (kind === 'puffs') {
+    ring(3, 0.017, (dx, dz) => at(part(G.cyl(0.014, 0.014, 0.018, 0.006, 10), col, 'thin'), dx, 0.009, dz));
+  } else if (kind === 'sticks') {
+    for (const r of [-0.4, 0.3]) {
+      const st = at(part(G.cyl(0.007, 0.007, 0.07, 0.003, 8), col, 'thin'), 0, 0.01, r * 0.03);
+      st.rotation.set(Math.PI / 2, r, 0);
+    }
+  } else if (kind === 'nuts') {
+    ring(4, 0.016, (dx, dz, i) => {
+      const n = at(part(G.sphere(0.012, 8, 6), col, 'thin'), dx, 0.006, dz);
+      n.scale.set(1.4, 0.5, 0.8);
+      n.rotation.y = i;
+    });
+  } else if (kind === 'berries') {
+    const r = extra || 0.013;
+    for (let i = 0; i < 6; i++) at(part(G.sphere(r, 10, 8), col, 'thin'), (rand() - 0.5) * 0.045, r * 0.8 + (i > 3 ? r : 0), (rand() - 0.5) * 0.045);
+  } else if (kind === 'strawberries') {
+    for (const [dx, dz] of [[-0.014, 0], [0.016, 0.01], [0, -0.016]]) berry(g, x + dx, y, z + dz, 0.75);
+  } else if (kind === 'chunks') {
+    ring(4, 0.018, (dx, dz) => {
+      const c = at(part(G.box(0.018, 0.014, 0.016, 0.004), col, 'thin'), dx, 0.007, dz);
+      c.rotation.y = rand() * 3;
+      add(c, part(G.box(0.019, 0.005, 0.017, 0.002), extra, false), 0, 0.006, 0);
+    });
+  } else if (kind === 'slices') {
+    ring(3, 0.016, (dx, dz) => {
+      const sl = at(part(G.cyl(0.016, 0.016, 0.006, 0.002, 14), col, 'thin'), dx, 0.006, dz);
+      sl.rotation.set(rand() * 0.5, 0, rand() * 0.5);
+      add(sl, part(G.cyl(0.011, 0.011, 0.007, 0.002, 12), mixHex(col, '#FFFBF0', 0.45), false));
+    });
+  } else if (kind === 'shreds') {
+    for (let i = 0; i < 6; i++) {
+      const sh = at(part(G.capsule(0.004, 0.03), col, false), (rand() - 0.5) * 0.04, 0.006, (rand() - 0.5) * 0.04);
+      sh.rotation.set(Math.PI / 2, rand() * 3, 0);
+    }
+  } else if (kind === 'dollop') {
+    swirl(g, 0.026, 0.03, col, x, y, z);
+  } else if (kind === 'egg') {
+    const white = at(part(G.cyl(0.03, 0.03, 0.006, 0.003, 18), '#FFFBF0', 'thin'), 0, 0.003, 0);
+    white.scale.z = 0.85;
+    const yolk = at(part(G.sphere(0.014, 12, 10), '#FFC940', 'thin'), 0.004, 0.009, 0);
+    yolk.scale.y = 0.7;
+  } else if (kind === 'scoop') {
+    at(part(G.sphere(0.03, 14, 10), col, 'thin'), 0, 0.022, 0);
+  }
+}
+
+/** The mixing bowl you carry while gathering: each ingredient in its own little pile, or batter once mixed. */
+export function bowlModel(ids = [], batter = null) {
   const g = new THREE.Group();
   const pts = [V(0.0005, 0), V(0.085, 0), V(0.125, 0.03), V(0.152, 0.08), V(0.158, 0.1), V(0.148, 0.102), V(0.14, 0.082), V(0.115, 0.036), V(0.078, 0.013), V(0.0005, 0.013)];
   add(g, part(G.lathe(pts, 28), C.cream2, 'mid'));
   const band = add(g, part(G.torus(0.152, 0.008, TAU, 28), C.pinkDeep, false), 0, 0.09, 0);
   band.rotation.x = Math.PI / 2;
-  const rand = rng(bits.length * 13 + 5);
+  const rand = rng(ids.length * 13 + 5);
+  const liquids = ids.filter((id) => BIT[id] && BIT[id][0] === 'liquid');
+  const solids = ids.filter((id) => !liquids.includes(id));
+  let floor = 0.014;
   if (batter) {
-    add(g, part(G.cyl(0.128, 0.128, 0.02, 0.006, 28), batter, false), 0, 0.062, 0);
-    const s = add(g, part(G.torus(0.05, 0.008, TAU * 0.8, 20), mixHex(batter, '#FFFBF0', 0.3), false), 0, 0.074, 0);
-    s.rotation.x = Math.PI / 2;
-  }
-  bits.forEach((col, i) => {
-    for (let k = 0; k < 3; k++) {
-      const a = rand() * TAU, d = 0.02 + rand() * 0.08;
-      const y = batter ? 0.078 : 0.03 + (i % 3) * 0.012 + rand() * 0.02;
-      const m = add(g, part(k % 2 ? G.sphere(0.018, 10, 8) : G.box(0.03, 0.022, 0.026, 0.008), col, 'thin'), Math.cos(a) * d, y, Math.sin(a) * d);
-      m.rotation.set(rand() * 3, rand() * 3, rand() * 3);
+    add(g, part(G.cyl(0.128, 0.128, 0.02, 0.006, 28), batter, false), 0, 0.058, 0);
+    const sw = add(g, part(G.torus(0.05, 0.008, TAU * 0.8, 20), mixHex(batter, '#FFFBF0', 0.3), false), 0, 0.07, 0);
+    sw.rotation.x = Math.PI / 2;
+    floor = 0.07;
+  } else if (liquids.length) {
+    const col = liquids.length === 1 ? BIT[liquids[0]][1] : mixHex(BIT[liquids[0]][1], BIT[liquids[1]][1], 0.5);
+    add(g, part(G.cyl(0.1, 0.1, 0.016, 0.005, 28), col, false), 0, 0.03, 0);
+    if (liquids.length > 1) {
+      const sw = add(g, part(G.torus(0.04, 0.006, TAU * 0.75, 20), BIT[liquids[1]][1], false), 0, 0.039, 0);
+      sw.rotation.x = Math.PI / 2;
     }
+    floor = 0.038;
+  }
+  // piles sit around the bowl like a little mise en place
+  const n = solids.length;
+  solids.forEach((id, i) => {
+    const a = (i / Math.max(n, 1)) * TAU + 0.6;
+    const r = n === 1 ? 0 : n === 2 ? 0.045 : 0.06;
+    const lift = floor;
+    addBit(g, id, Math.cos(a) * r, lift, Math.sin(a) * r, rand);
   });
   mergeStatic(g);
   return g;

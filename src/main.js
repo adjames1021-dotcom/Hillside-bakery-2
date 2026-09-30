@@ -3,7 +3,7 @@ import { outlineUniforms, setOutlineScale, setMaxAnisotropy } from './toon.js';
 import { buildWorld, ROOM, FP_LAYER } from './world.js';
 import { makeAnimal, animateAnimal } from './characters.js';
 import { DESSERTS, CATEGORIES, STATIONS, TOPPINGS, TOPPING_BY_ID, dessertURL } from './desserts.js';
-import { ING_BY_ID, ingredientBit } from './ingredients.js';
+import { ING_BY_ID } from './ingredients.js';
 import { dessertModel, bowlModel } from './dessert3d.js';
 import { buildHighlight } from './merge.js';
 import { ViewModel } from './viewmodel.js';
@@ -166,16 +166,17 @@ async function start(hotData = {}) {
 
   function itemLook(it) {
     const steps = it.d.steps;
+    if (it.preview) it = { ...it, step: it.step + 1, burnt: it.previewBurnt || it.burnt };
     let form = 'bowl';
     const bits = [];
     for (let i = 0; i < steps.length && i <= it.step; i++) {
       const s = steps[i];
       if (i < it.step) {
-        if (s.t === 'gather') { if (form !== 'model') bits.push(...s.items.map(ingredientBit)); }
+        if (s.t === 'gather') { if (form !== 'model') bits.push(...s.items); }
         else if (s.t === 'mix') { if (form === 'bowl') form = 'batter'; }
         else form = 'model';
       } else if (s.t === 'gather' && form !== 'model') {
-        bits.push(...[...it.got].map(ingredientBit));
+        bits.push(...it.got);
       }
     }
     if (form !== 'model') return { kind: 'bowl', bits: form === 'batter' ? bits.slice(-6) : bits, batter: form === 'batter' ? it.d.batter : null };
@@ -189,7 +190,7 @@ async function start(hotData = {}) {
   }
 
   function stationShowsItem(st) {
-    if (st.type === 'bake' || st.type === 'mix') return false;
+    if (st.type === 'mix') return false;
     if (st.type === 'chill') return !!st.done;
     return true;
   }
@@ -317,7 +318,7 @@ async function start(hotData = {}) {
     const c = {
       a, kind, name: pick(NAMES[kind]), seat, order, state: 'enter', mood: 1,
       path: [V3(door.x, 0, -0.45), seat.aisle.clone(), V3(seat.x, 0, seat.z)],
-      patience: 70, maxPatience: 70, t: 0, hop: 0, bites: 0, ticket: null, plate: null,
+      patience: 150, maxPatience: 150, t: 0, hop: 0, bites: 0, ticket: null, plate: null,
       bub: ui.bubble('order', '<span class="bang">!</span><img alt=""><span class="bar"><i></i></span>'),
       say: ui.bubble('say', ''),
       sayT: 0,
@@ -342,7 +343,7 @@ async function start(hotData = {}) {
 
   function takeOrder(c) {
     c.state = 'wait';
-    c.patience = c.maxPatience = 95 + c.order.steps.length * 28;
+    c.patience = c.maxPatience = 200 + c.order.steps.length * 45;
     c.bub.classList.add('taken');
     createTicket(c);
     say(c, pick([`One ${c.order.name}, please!`, `Could I have the ${c.order.name}?`, `${c.order.name}, pretty please!`]));
@@ -769,6 +770,8 @@ async function start(hotData = {}) {
       sfx.door();
     }
     if (st.type === 'chill') st.lidOpen = 0.9;
+    it.preview = false;
+    it.previewBurnt = 0;
     it.step += 1;
     st.item = null;
     st.done = false;
@@ -792,6 +795,11 @@ async function start(hotData = {}) {
         if (st.type === 'bake') {
           const ph = bakePhase(st);
           if (ph !== st.phase) {
+            if (ph !== 'baking') {
+              it.preview = true;
+              it.previewBurnt = ph === 'toasty' ? 1 : ph === 'burnt' ? 2 : 0;
+              placeItem(it);
+            }
             if (ph === 'golden') { sfx.ding(); ui.toast(`The ${it.d.name} is golden! Take it out of the oven.`, 'good'); st.bounce = 1; }
             if (ph === 'toasty') { sfx.alarm(); ui.toast(`The ${it.d.name} is getting toasty!`, 'sad'); }
             if (ph === 'burnt') { sfx.alarm(); ui.toast(`Oh no, the ${it.d.name} is burning!`, 'sad'); }
@@ -844,7 +852,8 @@ async function start(hotData = {}) {
       const working = !!it && (PASSIVE[st.type] ? !st.done && !(st.type === 'bake' && bakePhase(st) !== 'baking') : S.focus?.st === st);
       const b = st.built;
       if (st.type === 'bake') {
-        b.windowMat.emissiveIntensity += ((it ? 1.1 : 0.15) - b.windowMat.emissiveIntensity) * Math.min(1, dt * 4);
+        b.windowMat.emissiveIntensity += ((it ? 0.85 : 0.12) - b.windowMat.emissiveIntensity) * Math.min(1, dt * 4);
+        b.lightMat.emissiveIntensity = it ? 0.9 : 0;
         b.glow.material.opacity = it ? 0.45 + Math.sin(S.time * 6) * 0.08 : 0.12;
         st.doorOpen = Math.max(0, (st.doorOpen || 0) - dt);
         const want = st.doorOpen > 0 ? 1.45 : 0;
@@ -917,7 +926,7 @@ async function start(hotData = {}) {
           st.bubFill.style.strokeDashoffset = `${(1 - clamp(k, 0, 1)) * 106.8}`;
           if (st.bubLbl.textContent !== lbl) st.bubLbl.textContent = lbl;
           st.bub.dataset.state = cls;
-          ui.project(st.bub, V3(st.slot.x, st.type === 'bake' ? 1.74 : st.slot.y + 0.6, st.slot.z), cam, 14);
+          ui.project(st.bub, V3(st.slot.x, st.type === 'bake' ? 1.62 : st.slot.y + 0.6, st.slot.z), cam, 14);
         }
       }
     }
@@ -1474,7 +1483,7 @@ async function start(hotData = {}) {
     } else {
       fox.root.visible = false;
       outlineUniforms.distRef.value = 2.4;
-      const bob = moving ? Math.sin(bobPhase * 2) * 0.025 : 0;
+      const bob = moving ? Math.sin(bobPhase * 2) * 0.007 : 0;
       if (S.camTween) {
         const T = S.camTween;
         T.t += raw / T.dur;
