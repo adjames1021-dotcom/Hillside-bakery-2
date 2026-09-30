@@ -1,301 +1,33 @@
 // The 50 desserts: menu data plus a little canvas "sticker" painter for each.
 // Icons are drawn in a 100x100 space with flat toon fills and ink outlines.
 
-const INK = '#4B2E1D';
-const TAU = Math.PI * 2;
-const LW = 3;
+import {
+  INK, TAU, LW, mixHex, dk, lt, rng, E, Ci, R, P, ts, cloud, tube, line, dots, inEll, sprinkles,
+  plate, steam, cherry, strawberry, pecanHalf, bananaSlice, cylinder, prism, glassBowl, scoop, drawSticker,
+} from './sticker.js';
 
+// Where each kind of recipe step happens.
 export const STATIONS = {
-  mix: { name: 'Mixing Bowl', verb: 'Mix', ing: 'Mixing' },
-  bake: { name: 'Oven', verb: 'Bake', ing: 'Baking' },
-  stove: { name: 'Stove', verb: 'Cook', ing: 'Cooking' },
-  fridge: { name: 'Fridge', verb: 'Chill', ing: 'Chilling' },
-  decor: { name: 'Decorating Table', verb: 'Decorate', ing: 'Decorating' },
+  storage: { name: 'Storage', short: 'Gather' },
+  mix: { name: 'Mixing Bowl', short: 'Mix' },
+  prep: { name: 'Island', short: 'Prep' },
+  bake: { name: 'Oven', short: 'Bake' },
+  cook: { name: 'Stove', short: 'Cook' },
+  chill: { name: 'Freezer', short: 'Chill' },
+  decor: { name: 'Decorating Table', short: 'Decorate' },
 };
+export const STEP_STATION = { gather: 'storage', mix: 'mix', prep: 'prep', bake: 'bake', cook: 'cook', chill: 'chill', decor: 'decor' };
 
 export const CATEGORIES = [
   { id: 'pies', name: 'Pies & Cobblers', color: '#F4A646', unlock: 0 },
   { id: 'cookies', name: 'Cookies & Bars', color: '#E8BC7A', unlock: 0 },
-  { id: 'pastries', name: 'Pastries & Fried Treats', color: '#F7B9C4', unlock: 4 },
-  { id: 'cakes', name: 'Cakes', color: '#EE93A6', unlock: 9 },
-  { id: 'cold', name: 'Cold & Frozen', color: '#AFD6EC', unlock: 15 },
-  { id: 'candy', name: 'Candy & Campfire', color: '#AFCB9C', unlock: 22 },
+  { id: 'pastries', name: 'Pastries & Fried Treats', color: '#F7B9C4', unlock: 3 },
+  { id: 'cakes', name: 'Cakes', color: '#EE93A6', unlock: 6 },
+  { id: 'cold', name: 'Cold & Frozen', color: '#AFD6EC', unlock: 10 },
+  { id: 'candy', name: 'Candy & Campfire', color: '#AFCB9C', unlock: 14 },
 ];
 
 // ------------------------------------------------------------------ helpers
-
-function hexToRgb(h) {
-  const n = parseInt(h.slice(1), 16);
-  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
-}
-function mixHex(a, b, t) {
-  const A = hexToRgb(a), B = hexToRgb(b);
-  const r = A.map((v, i) => Math.round(v + (B[i] - v) * t));
-  return '#' + r.map((v) => v.toString(16).padStart(2, '0')).join('');
-}
-const dk = (c, t = 0.2) => mixHex(c, '#8A3E22', t);
-const lt = (c, t = 0.35) => mixHex(c, '#FFFBF0', t);
-
-function rng(seed) {
-  let a = seed * 9301 + 49297;
-  return () => {
-    a |= 0;
-    a = (a + 0x6d2b79f5) | 0;
-    let t = Math.imul(a ^ (a >>> 15), 1 | a);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-
-// path builders
-const E = (x, y, rx, ry, rot = 0) => (c) => { c.beginPath(); c.ellipse(x, y, rx, ry, rot, 0, TAU); };
-const Ci = (x, y, r) => E(x, y, r, r);
-const R = (x, y, w, h, r) => (c) => { c.beginPath(); c.roundRect(x, y, w, h, r); };
-const P = (pts) => (c) => {
-  c.beginPath();
-  pts.forEach(([x, y], i) => (i ? c.lineTo(x, y) : c.moveTo(x, y)));
-  c.closePath();
-};
-
-/** Toon fill: shadow color, lit color shifted toward the upper-left sun, ink edge. */
-function ts(c, path, color, o = {}) {
-  const off = o.off ?? 4;
-  c.save();
-  path(c);
-  c.fillStyle = o.flat ? color : dk(color, o.shade ?? 0.16);
-  c.fill();
-  if (!o.flat) {
-    c.clip();
-    c.translate(-off, -off * 0.8);
-    path(c);
-    c.fillStyle = color;
-    c.fill();
-  }
-  c.restore();
-  if (o.gloss) {
-    c.save();
-    path(c);
-    c.clip();
-    c.fillStyle = 'rgba(255,251,240,0.75)';
-    const [gx, gy, gr] = o.gloss;
-    c.beginPath();
-    c.ellipse(gx, gy, gr, gr * 0.55, -0.5, 0, TAU);
-    c.fill();
-    c.restore();
-  }
-  if (o.lw !== 0) {
-    path(c);
-    c.lineWidth = o.lw ?? LW;
-    c.strokeStyle = INK;
-    c.lineJoin = 'round';
-    c.stroke();
-  }
-}
-
-/** Union of circles with a single outer ink line (whipped cream, clouds, puffs). */
-function cloud(c, circles, color, o = {}) {
-  const lw = o.lw ?? LW;
-  c.save();
-  c.strokeStyle = INK;
-  c.lineWidth = lw * 2;
-  for (const [x, y, r] of circles) {
-    c.beginPath();
-    c.arc(x, y, r, 0, TAU);
-    c.stroke();
-  }
-  c.beginPath();
-  for (const [x, y, r] of circles) {
-    c.moveTo(x + r, y);
-    c.arc(x, y, r, 0, TAU);
-  }
-  c.fillStyle = o.flat ? color : dk(color, o.shade ?? 0.1);
-  c.fill();
-  if (!o.flat) {
-    c.clip();
-    c.beginPath();
-    for (const [x, y, r] of circles) {
-      c.moveTo(x + r - 2.5, y - 2.2);
-      c.arc(x - 2.5, y - 2.2, r, 0, TAU);
-    }
-    c.fillStyle = color;
-    c.fill();
-  }
-  c.restore();
-  if (o.colors) {
-    // multi-colored cloud (cotton candy): refill each circle, then keep outer line
-    circles.forEach(([x, y, r], i) => {
-      c.beginPath();
-      c.arc(x, y, r, 0, TAU);
-      c.fillStyle = o.colors[i % o.colors.length];
-      c.fill();
-    });
-  }
-}
-
-/** Ink tube stroke: outlined ribbon along a path (straws, drizzle, dough ribbons). */
-function tube(c, pts, color, w, o = {}) {
-  const draw = () => {
-    c.beginPath();
-    pts.forEach(([x, y], i) => (i ? c.lineTo(x, y) : c.moveTo(x, y)));
-  };
-  c.save();
-  c.lineCap = 'round';
-  c.lineJoin = 'round';
-  draw();
-  c.strokeStyle = INK;
-  c.lineWidth = w + (o.lw ?? LW) * 2 - 1;
-  c.stroke();
-  draw();
-  c.strokeStyle = color;
-  c.lineWidth = w;
-  c.stroke();
-  c.restore();
-}
-
-function line(c, pts, lw = 2, color = INK) {
-  c.beginPath();
-  pts.forEach(([x, y], i) => (i ? c.lineTo(x, y) : c.moveTo(x, y)));
-  c.lineWidth = lw;
-  c.strokeStyle = color;
-  c.lineCap = 'round';
-  c.lineJoin = 'round';
-  c.stroke();
-}
-
-function dots(c, rand, n, fx, color, r = 1.3) {
-  c.fillStyle = color;
-  for (let i = 0; i < n; i++) {
-    const [x, y] = fx(rand);
-    c.beginPath();
-    c.arc(x, y, r * (0.7 + rand() * 0.6), 0, TAU);
-    c.fill();
-  }
-}
-const inEll = (x, y, rx, ry) => (rand) => {
-  const a = rand() * TAU, d = Math.sqrt(rand());
-  return [x + Math.cos(a) * rx * d, y + Math.sin(a) * ry * d];
-};
-
-function sprinkles(c, rand, n, fx, colors = ['#EE93A6', '#86BADB', '#FFE08A', '#AFCB9C', '#F4A646']) {
-  for (let i = 0; i < n; i++) {
-    const [x, y] = fx(rand);
-    c.save();
-    c.translate(x, y);
-    c.rotate(rand() * Math.PI);
-    c.fillStyle = colors[i % colors.length];
-    c.beginPath();
-    c.roundRect(-2.6, -0.9, 5.2, 1.8, 0.9);
-    c.fill();
-    c.restore();
-  }
-}
-
-function plate(c, x = 50, y = 80, rx = 44, ry = 13, col = '#FFF3DC') {
-  ts(c, E(x, y + 2.5, rx, ry), dk(col, 0.1), { flat: true });
-  ts(c, E(x, y, rx, ry), col, { off: 2 });
-  c.beginPath();
-  c.ellipse(x, y - 0.5, rx * 0.72, ry * 0.62, 0, 0, TAU);
-  c.lineWidth = 1.4;
-  c.strokeStyle = mixHex(col, INK, 0.3);
-  c.stroke();
-}
-
-function steam(c, xs, y) {
-  for (const x of xs) {
-    const pts = [];
-    for (let i = 0; i <= 10; i++) pts.push([x + Math.sin(i * 0.8) * 3, y - i * 2.2]);
-    tube(c, pts, '#FFFBF0', 2.6, { lw: 1.6 });
-  }
-}
-
-function cherry(c, x, y, r = 5.5) {
-  line(c, [[x, y - r + 1], [x + 3, y - r - 7], [x + 7, y - r - 9]], 2.2, '#6E8F4E');
-  line(c, [[x, y - r + 1], [x + 3, y - r - 7], [x + 7, y - r - 9]], 1.1, '#9CC37A');
-  ts(c, Ci(x, y, r), '#E4605E', { off: 2, gloss: [x - 1.8, y - 2, 2.2] });
-}
-
-function strawberry(c, x, y, s = 1) {
-  const p = (cc) => {
-    cc.beginPath();
-    cc.moveTo(x, y + 8 * s);
-    cc.bezierCurveTo(x - 9 * s, y + 2 * s, x - 7 * s, y - 6 * s, x, y - 5 * s);
-    cc.bezierCurveTo(x + 7 * s, y - 6 * s, x + 9 * s, y + 2 * s, x, y + 8 * s);
-    cc.closePath();
-  };
-  ts(c, p, '#E4605E', { off: 2 });
-  c.fillStyle = '#FFE08A';
-  for (const [dx, dy] of [[-3, -1], [2, -2], [0, 2], [-2, 4], [3, 3]]) {
-    c.beginPath();
-    c.ellipse(x + dx * s, y + dy * s, 0.8, 1.2, 0, 0, TAU);
-    c.fill();
-  }
-  ts(c, P([[x - 5 * s, y - 5 * s], [x, y - 8 * s], [x + 5 * s, y - 5 * s], [x, y - 3 * s]]), '#88AE7B', { off: 1, lw: 1.8 });
-}
-
-function pecanHalf(c, x, y, rot = 0, s = 1) {
-  ts(c, E(x, y, 5.5 * s, 3.3 * s, rot), '#95512A', { off: 1.5, lw: 2 });
-  c.save();
-  c.translate(x, y);
-  c.rotate(rot);
-  line(c, [[-4 * s, 0], [4 * s, 0]], 1.2, '#5E3219');
-  line(c, [[-2 * s, -1.8 * s], [-2 * s, 1.8 * s]], 1, '#5E3219');
-  line(c, [[1.5 * s, -1.8 * s], [1.5 * s, 1.8 * s]], 1, '#5E3219');
-  c.restore();
-}
-
-function bananaSlice(c, x, y, r = 5) {
-  ts(c, E(x, y, r, r * 0.75), '#FFF0B3', { off: 1.2, lw: 2 });
-  c.fillStyle = '#C9A55B';
-  for (let i = 0; i < 3; i++) {
-    const a = (i / 3) * TAU;
-    c.beginPath();
-    c.arc(x + Math.cos(a) * r * 0.3, y + Math.sin(a) * r * 0.22, 0.7, 0, TAU);
-    c.fill();
-  }
-}
-
-function cylinder(c, x, yTop, rx, ry, h, side, top, o = {}) {
-  const sidePath = (cc) => {
-    cc.beginPath();
-    cc.moveTo(x - rx, yTop);
-    cc.lineTo(x - rx, yTop + h);
-    cc.ellipse(x, yTop + h, rx, ry, 0, Math.PI, 0, true);
-    cc.lineTo(x + rx, yTop);
-    cc.closePath();
-  };
-  ts(c, sidePath, side, o);
-  if (top) ts(c, E(x, yTop, rx, ry), top, { off: 3 });
-}
-
-function prism(c, x, y, w, h, d, top, front, side, o = {}) {
-  const dx = d * 0.75, dy = d * 0.5;
-  const bands = Array.isArray(front) ? front : [[front, 1]];
-  // front face bands
-  let acc = 0;
-  for (const [col, f] of bands) {
-    const y0 = y + acc * h, y1 = y + (acc + f) * h;
-    ts(c, R(x, y0, w, y1 - y0, 1.5), col, { off: 2, lw: 0 });
-    acc += f;
-  }
-  const sideBands = o.sideBands || bands;
-  acc = 0;
-  for (const [col, f] of sideBands) {
-    const y0 = y + acc * h, y1 = y + (acc + f) * h;
-    ts(c, P([[x + w, y0], [x + w + dx, y0 - dy], [x + w + dx, y1 - dy], [x + w, y1]]), dk(side || col, 0.12), { flat: true, lw: 0 });
-    acc += f;
-  }
-  ts(c, P([[x, y], [x + w, y], [x + w + dx, y - dy], [x + dx, y - dy]]), top, { off: 2, lw: 0 });
-  // outline of the whole block
-  const outline = P([[x, y], [x + dx, y - dy], [x + w + dx, y - dy], [x + w + dx, y + h - dy], [x + w, y + h], [x, y + h]]);
-  outline(c);
-  c.lineWidth = o.lw ?? LW;
-  c.strokeStyle = INK;
-  c.lineJoin = 'round';
-  c.stroke();
-  line(c, [[x, y], [x + w, y], [x + w + dx, y - dy]], 1.6);
-  line(c, [[x + w, y], [x + w, y + h]], 1.6);
-  return { topPath: P([[x, y], [x + w, y], [x + w + dx, y - dy], [x + dx, y - dy]]) };
-}
 
 // ------------------------------------------------------------------ templates
 
@@ -522,69 +254,41 @@ function donut(c, x, y, r, glaze, rand, o = {}) {
   ts(c, E(x, y - 1.5, r * 0.3, r * 0.17), '#B8743C', { flat: true, lw: 2 });
 }
 
-function glassBowl(c, x, y, w) {
-  const glass = '#DDF0F6';
-  ts(c, E(x, 88, 14, 4.5), glass, { off: 1 });
-  ts(c, R(x - 3, 74, 6, 14, 2), glass, { off: 1, lw: 2.4 });
-  const bowl = (cc) => {
-    cc.beginPath();
-    cc.moveTo(x - w, y);
-    cc.bezierCurveTo(x - w, y + 18, x - 10, y + 26, x, y + 26);
-    cc.bezierCurveTo(x + 10, y + 26, x + w, y + 18, x + w, y);
-    cc.closePath();
-  };
-  ts(c, bowl, glass, { off: 3, gloss: [x - w * 0.55, y + 8, 4] });
-}
-
-function scoop(c, x, y, r, col) {
-  const p = (cc) => {
-    cc.beginPath();
-    cc.arc(x, y, r, Math.PI * 0.95, Math.PI * 0.05);
-    for (let i = 0; i <= 6; i++) {
-      const t = i / 6;
-      const px = x + r - t * 2 * r;
-      cc.lineTo(px, y + r * 0.35 + (i % 2 ? r * 0.18 : 0));
-    }
-    cc.closePath();
-  };
-  ts(c, p, col, { off: 2.5 });
-}
-
 // ------------------------------------------------------------------ the menu
 
 const D = [
   // Pies & Cobblers
-  ['apple-pie', 'Apple Pie', 'pies', ['mix', 'bake'], 'Golden lattice crust, cinnamon-apple filling peeking through, steam rising.',
+  ['apple-pie', 'Apple Pie', 'pies', 'Golden lattice crust, cinnamon-apple filling peeking through, steam rising.',
     (c, r) => pie(c, { fill: '#EDB44E', bits: '#F7DB8C', top: 'lattice', steam: true }, r)],
-  ['pecan-pie', 'Pecan Pie', 'pies', ['mix', 'bake'], 'Glossy caramel-brown filling and whole pecan halves in a fluted crust.',
+  ['pecan-pie', 'Pecan Pie', 'pies', 'Glossy caramel-brown filling and whole pecan halves in a fluted crust.',
     (c, r) => pie(c, { fill: '#B8652E', top: 'pecans', glossy: true }, r)],
-  ['key-lime-pie', 'Key Lime Pie', 'pies', ['mix', 'fridge'], 'Pale green filling, whipped cream rosettes and a lime slice.',
+  ['key-lime-pie', 'Key Lime Pie', 'pies', 'Pale green filling, whipped cream rosettes and a lime slice.',
     (c, r) => pie(c, { fill: '#DDEBA2', top: 'rosettes' }, r)],
-  ['pumpkin-pie', 'Pumpkin Pie', 'pies', ['mix', 'bake'], 'Smooth orange filling, a whipped cream dollop and a dusting of nutmeg.',
+  ['pumpkin-pie', 'Pumpkin Pie', 'pies', 'Smooth orange filling, a whipped cream dollop and a dusting of nutmeg.',
     (c, r) => pie(c, { fill: '#E8893A', top: 'dollop' }, r)],
-  ['cherry-pie', 'Cherry Pie', 'pies', ['mix', 'bake'], 'Deep red filling bubbling through a sugared lattice crust.',
+  ['cherry-pie', 'Cherry Pie', 'pies', 'Deep red filling bubbling through a sugared lattice crust.',
     (c, r) => pie(c, { fill: '#C8384A', bits: '#E4605E', top: 'lattice', sugar: true }, r)],
-  ['banana-cream-pie', 'Banana Cream Pie', 'pies', ['mix', 'bake', 'decor'], 'Mounded whipped cream, banana slices and chocolate shavings.',
+  ['banana-cream-pie', 'Banana Cream Pie', 'pies', 'Mounded whipped cream, banana slices and chocolate shavings.',
     (c, r) => pie(c, { fill: '#FFE9A0', top: 'mound', bananas: true }, r)],
-  ['blueberry-pie', 'Blueberry Pie', 'pies', ['mix', 'bake'], 'Purple berry filling oozing from a lattice top.',
+  ['blueberry-pie', 'Blueberry Pie', 'pies', 'Purple berry filling oozing from a lattice top.',
     (c, r) => pie(c, { fill: '#6F5AA8', bits: '#8E7CC8', top: 'lattice', ooze: true }, r)],
-  ['sweet-potato-pie', 'Sweet Potato Pie', 'pies', ['mix', 'bake'], 'Smooth orange-brown filling with a lightly toasted crust edge.',
+  ['sweet-potato-pie', 'Sweet Potato Pie', 'pies', 'Smooth orange-brown filling with a lightly toasted crust edge.',
     (c, r) => pie(c, { fill: '#D9824A', edge: '#D99550', glossy: true }, r)],
-  ['mud-pie', 'Mississippi Mud Pie', 'pies', ['mix', 'bake', 'decor'], 'Dark chocolate layers, a chocolate cookie crust and whipped topping.',
+  ['mud-pie', 'Mississippi Mud Pie', 'pies', 'Dark chocolate layers, a chocolate cookie crust and whipped topping.',
     (c, r) => pie(c, { fill: '#5A3322', crust: '#6E4431', top: 'mound', shavings: '#4E2C1C' }, r)],
-  ['peach-cobbler', 'Peach Cobbler', 'pies', ['mix', 'bake'], 'Bubbling in a cast-iron skillet under a golden, crumbly biscuit topping.',
+  ['peach-cobbler', 'Peach Cobbler', 'pies', 'Bubbling in a cast-iron skillet under a golden, crumbly biscuit topping.',
     (c, r) => skillet(c, { fill: '#F6A55A', top: '#EFC06C', steam: true }, r)],
-  ['apple-crisp', 'Apple Crisp', 'pies', ['mix', 'bake'], 'Baked with a crunchy oat-and-brown-sugar topping.',
+  ['apple-crisp', 'Apple Crisp', 'pies', 'Baked with a crunchy oat-and-brown-sugar topping.',
     (c, r) => dish(c, {
       dish: '#AFD6EC', fill: '#D9A05B',
       detail: (cc, rr) => { dots(cc, rr, 40, (q) => [16 + q() * 68, 43 + q() * 16], '#F3D9A0', 1.8); dots(cc, rr, 30, (q) => [16 + q() * 68, 43 + q() * 16], '#A8612E', 1.4); },
     }, r)],
 
   // Cakes
-  ['cheesecake', 'New York Cheesecake', 'cakes', ['mix', 'bake', 'fridge'], 'Graham cracker crust and a glossy strawberry topping.',
+  ['cheesecake', 'New York Cheesecake', 'cakes', 'Graham cracker crust and a glossy strawberry topping.',
     (c, r) => wedge(c, { layers: [['#FFF1D0', 0.8], ['#C98A4A', 0.2]], top: '#D8404E', outside: '#F3D69A', drip: '#D8404E',
       extra: (cc) => { strawberry(cc, 44, 44, 0.8); strawberry(cc, 64, 44, 0.7); } }, r)],
-  ['cupcake', 'Cupcake', 'cakes', ['mix', 'bake', 'decor'], 'Swirled buttercream, colorful sprinkles and a paper liner.',
+  ['cupcake', 'Cupcake', 'cakes', 'Swirled buttercream, colorful sprinkles and a paper liner.',
     (c, r) => {
       ts(c, P([[26, 60], [74, 60], [67, 90], [33, 90]]), '#F7B9C4', { off: 2 });
       for (const x of [36, 43, 50, 57, 64]) line(c, [[x, 62], [x - (x - 50) * 0.15, 88]], 1.4, '#D98A9C');
@@ -595,21 +299,21 @@ const D = [
       sprinkles(c, r, 16, inEll(50, 44, 16, 13));
       cherry(c, 52, 20, 5);
     }],
-  ['red-velvet', 'Red Velvet Cake', 'cakes', ['mix', 'bake', 'decor'], 'Deep red layers with white cream cheese frosting.',
+  ['red-velvet', 'Red Velvet Cake', 'cakes', 'Deep red layers with white cream cheese frosting.',
     (c, r) => wedge(c, { layers: [['#B8323F', 0.3], ['#FFF6E6', 0.12], ['#B8323F', 0.3], ['#FFF6E6', 0.12], ['#B8323F', 0.16]], top: '#FFF6E6', outside: '#FFF6E6', topDots: '#B8323F' }, r)],
-  ['boston-cream', 'Boston Cream Pie', 'cakes', ['mix', 'bake', 'decor'], 'Sponge layers, custard filling and a dark chocolate ganache drip.',
+  ['boston-cream', 'Boston Cream Pie', 'cakes', 'Sponge layers, custard filling and a dark chocolate ganache drip.',
     (c, r) => wedge(c, { layers: [['#F3D08A', 0.38], ['#FFE066', 0.22], ['#F3D08A', 0.4]], top: '#4E2C1C', outside: '#F3D08A', drip: '#4E2C1C' }, r)],
-  ['carrot-cake', 'Carrot Cake', 'cakes', ['mix', 'bake', 'decor'], 'Spiced orange layers, cream cheese frosting and chopped walnuts.',
+  ['carrot-cake', 'Carrot Cake', 'cakes', 'Spiced orange layers, cream cheese frosting and chopped walnuts.',
     (c, r) => wedge(c, { layers: [['#D9864A', 0.3], ['#FFF6E6', 0.12], ['#D9864A', 0.3], ['#FFF6E6', 0.12], ['#D9864A', 0.16]], top: '#FFF6E6', outside: '#FFF6E6', frontDots: '#F4A646',
       extra: (cc, rr) => {
         for (const [x, y] of [[40, 45], [52, 43], [62, 47], [70, 44]]) ts(cc, E(x, y, 3, 2.2, rr()), '#B87A45', { off: 1, lw: 1.5 });
         ts(cc, P([[46, 49], [58, 45], [56, 48.5]]), '#F4A646', { off: 1, lw: 1.6 });
         line(cc, [[57, 45], [60, 42]], 2, '#88AE7B');
       } }, r)],
-  ['devils-food', "Devil's Food Cake", 'cakes', ['mix', 'bake', 'decor'], 'Rich dark chocolate layers with thick fudge frosting.',
+  ['devils-food', "Devil's Food Cake", 'cakes', 'Rich dark chocolate layers with thick fudge frosting.',
     (c, r) => wedge(c, { layers: [['#4E2C1C', 0.28], ['#7A4A30', 0.14], ['#4E2C1C', 0.28], ['#7A4A30', 0.14], ['#4E2C1C', 0.16]], top: '#7A4A30', outside: '#7A4A30',
       extra: (cc) => { for (const [x, y] of [[40, 47], [60, 45]]) line(cc, [[x - 6, y], [x - 2, y - 3], [x + 2, y], [x + 6, y - 3]], 1.6, '#A06A48'); } }, r)],
-  ['pineapple-upside-down', 'Pineapple Upside-Down Cake', 'cakes', ['mix', 'bake', 'decor'], 'Caramelized pineapple rings and cherries on golden sponge.',
+  ['pineapple-upside-down', 'Pineapple Upside-Down Cake', 'cakes', 'Caramelized pineapple rings and cherries on golden sponge.',
     (c) => {
       plate(c, 50, 78, 45, 13);
       cylinder(c, 50, 52, 38, 13, 18, '#F0C56A', '#E39A3C');
@@ -618,10 +322,10 @@ const D = [
         ts(c, Ci(x, y, 2.8), '#E4605E', { off: 0.8, lw: 1.6 });
       }
     }],
-  ['german-chocolate', 'German Chocolate Cake', 'cakes', ['mix', 'bake', 'decor'], 'Coconut-pecan frosting between chocolate layers.',
+  ['german-chocolate', 'German Chocolate Cake', 'cakes', 'Coconut-pecan frosting between chocolate layers.',
     (c, r) => wedge(c, { layers: [['#6A4029', 0.3], ['#D9B27A', 0.14], ['#6A4029', 0.3], ['#D9B27A', 0.14], ['#6A4029', 0.12]], top: '#D9B27A', outside: '#6A4029', topDots: '#FFF6E6', frontDots: null,
       extra: (cc) => { pecanHalf(cc, 50, 46, 0.2, 0.8); pecanHalf(cc, 66, 44, -0.3, 0.8); } }, r)],
-  ['angel-food', 'Angel Food Cake', 'cakes', ['mix', 'bake', 'decor'], 'Tall and airy, with a light golden crust and powdered sugar.',
+  ['angel-food', 'Angel Food Cake', 'cakes', 'Tall and airy, with a light golden crust and powdered sugar.',
     (c, r) => {
       plate(c, 50, 82, 42, 12);
       cylinder(c, 50, 38, 32, 11, 38, '#E4AC62', '#F6DDA4');
@@ -629,7 +333,7 @@ const D = [
       dots(c, r, 50, inEll(50, 38, 30, 10), '#FFFBF0', 1.1);
       dots(c, r, 16, (q) => [22 + q() * 56, 44 + q() * 28], '#F6DDA4', 1);
     }],
-  ['pound-cake', 'Pound Cake', 'cakes', ['mix', 'bake', 'decor'], 'A golden-crusted loaf, thick slices and a light glaze.',
+  ['pound-cake', 'Pound Cake', 'cakes', 'A golden-crusted loaf, thick slices and a light glaze.',
     (c) => {
       plate(c, 50, 82, 44, 11);
       prism(c, 14, 44, 44, 30, 22, '#DE9A4C', '#E3A052', '#E3A052');
@@ -644,7 +348,7 @@ const D = [
         c.restore();
       }
     }],
-  ['strawberry-shortcake', 'Strawberry Shortcake', 'cakes', ['mix', 'bake', 'decor'], 'A split biscuit, fresh strawberries and whipped cream.',
+  ['strawberry-shortcake', 'Strawberry Shortcake', 'cakes', 'A split biscuit, fresh strawberries and whipped cream.',
     (c) => {
       plate(c, 50, 84, 42, 11);
       ts(c, R(20, 64, 60, 18, 9), '#EDB86A');
@@ -663,7 +367,7 @@ const D = [
       cloud(c, [[50, 38, 7], [44, 40, 5], [56, 40, 5], [50, 32, 4.5]], '#FFFBF0');
       strawberry(c, 52, 28, 0.85);
     }],
-  ['whoopie-pies', 'Whoopie Pies', 'cakes', ['mix', 'bake', 'decor'], 'Two round chocolate cake halves sandwiching white cream.',
+  ['whoopie-pies', 'Whoopie Pies', 'cakes', 'Two round chocolate cake halves sandwiching white cream.',
     (c) => {
       const whoopie = (x, y, s) => {
         const low = (cc) => { cc.beginPath(); cc.ellipse(x, y + 6 * s, 22 * s, 4 * s, 0, Math.PI, 0); cc.ellipse(x, y + 6 * s, 22 * s, 12 * s, 0, 0, Math.PI); cc.closePath(); };
@@ -677,9 +381,9 @@ const D = [
     }],
 
   // Cookies & Bars
-  ['chocolate-chip', 'Chocolate Chip Cookies', 'cookies', ['mix', 'bake'], 'Thick and golden-brown with melted chocolate pools.',
+  ['chocolate-chip', 'Chocolate Chip Cookies', 'cookies', 'Thick and golden-brown with melted chocolate pools.',
     (c, r) => { cookie(c, 62, 42, 25, { base: '#DFA35A', chips: true }, r); cookie(c, 40, 64, 28, { base: '#E3A95E', chips: true }, r); }],
-  ['brownies', 'Brownies', 'cookies', ['mix', 'bake'], 'Dense fudgy squares with a shiny crackled top.',
+  ['brownies', 'Brownies', 'cookies', 'Dense fudgy squares with a shiny crackled top.',
     (c) => {
       prism(c, 44, 34, 32, 18, 26, '#7B4A30', '#5A3422', '#5A3422');
       line(c, [[52, 28], [58, 26], [64, 29], [70, 27]], 1.4, '#A87458');
@@ -687,16 +391,16 @@ const D = [
       line(c, [[24, 50], [32, 47], [38, 51], [48, 48]], 1.4, '#A87458');
       line(c, [[30, 53], [40, 51], [50, 53]], 1.2, '#A87458');
     }],
-  ['snickerdoodles', 'Snickerdoodles', 'cookies', ['mix', 'bake'], 'Cinnamon-sugar coated with cracked, pillowy tops.',
+  ['snickerdoodles', 'Snickerdoodles', 'cookies', 'Cinnamon-sugar coated with cracked, pillowy tops.',
     (c, r) => { cookie(c, 62, 42, 25, { base: '#EBC98E', cracks: true }, r); cookie(c, 40, 64, 28, { base: '#EFCF96', cracks: true }, r); }],
-  ['lemon-bars', 'Lemon Bars', 'cookies', ['mix', 'bake'], 'Bright yellow custard on shortbread, dusted with powdered sugar.',
+  ['lemon-bars', 'Lemon Bars', 'cookies', 'Bright yellow custard on shortbread, dusted with powdered sugar.',
     (c, r) => {
       prism(c, 44, 36, 32, 18, 26, '#FFF3B0', [['#FFE066', 0.6], ['#EFC984', 0.4]], null);
       dots(c, r, 18, (q) => [48 + q() * 44, 24 + q() * 10], '#FFFBF0', 1);
       prism(c, 16, 58, 38, 20, 28, '#FFF3B0', [['#FFE066', 0.6], ['#EFC984', 0.4]], null);
       dots(c, r, 24, (q) => [22 + q() * 50, 46 + q() * 10], '#FFFBF0', 1);
     }],
-  ['rice-krispies', 'Rice Krispies Treats', 'cookies', ['stove', 'fridge'], 'Golden marshmallow-bound squares, slightly glossy.',
+  ['rice-krispies', 'Rice Krispies Treats', 'cookies', 'Golden marshmallow-bound squares, slightly glossy.',
     (c, r) => {
       const bar = (x, y, w, h, d) => {
         prism(c, x, y, w, h, d, '#F0D08E', '#E4BE78', '#E4BE78');
@@ -710,17 +414,17 @@ const D = [
       bar(44, 34, 32, 18, 26);
       bar(16, 56, 38, 20, 28);
     }],
-  ['oatmeal-raisin', 'Oatmeal Raisin Cookies', 'cookies', ['mix', 'bake'], 'Chewy and rustic with plump raisins.',
+  ['oatmeal-raisin', 'Oatmeal Raisin Cookies', 'cookies', 'Chewy and rustic with plump raisins.',
     (c, r) => { cookie(c, 62, 42, 25, { base: '#D29A58', oats: true }, r); cookie(c, 40, 64, 28, { base: '#D8A05E', oats: true }, r); }],
-  ['peanut-butter', 'Peanut Butter Cookies', 'cookies', ['mix', 'bake'], 'A crisscross fork pattern on top.',
+  ['peanut-butter', 'Peanut Butter Cookies', 'cookies', 'A crisscross fork pattern on top.',
     (c, r) => { cookie(c, 62, 42, 25, { base: '#DDA25E', fork: true }, r); cookie(c, 40, 64, 28, { base: '#E2A964', fork: true }, r); }],
-  ['sugar-cookies', 'Frosted Sugar Cookies', 'cookies', ['mix', 'bake', 'decor'], 'Bright pastel icing with rainbow sprinkles.',
+  ['sugar-cookies', 'Frosted Sugar Cookies', 'cookies', 'Bright pastel icing with rainbow sprinkles.',
     (c, r) => { cookie(c, 62, 42, 25, { base: '#F6DDAE', icing: '#AFD6EC' }, r); cookie(c, 40, 64, 28, { base: '#F6DDAE', icing: '#F7B9C4' }, r); }],
 
   // Pastries & Fried Treats
-  ['glazed-donuts', 'Glazed Donuts', 'pastries', ['mix', 'stove', 'decor'], 'Soft rings with shiny sugar glaze and a few rainbow sprinkles.',
+  ['glazed-donuts', 'Glazed Donuts', 'pastries', 'Soft rings with shiny sugar glaze and a few rainbow sprinkles.',
     (c, r) => { donut(c, 60, 40, 26, '#FFF3DC', r); donut(c, 42, 64, 30, '#F7B9C4', r); }],
-  ['cinnamon-rolls', 'Cinnamon Rolls', 'pastries', ['mix', 'bake', 'decor'], 'Spiral swirls with thick white icing melting over warm dough.',
+  ['cinnamon-rolls', 'Cinnamon Rolls', 'pastries', 'Spiral swirls with thick white icing melting over warm dough.',
     (c, r) => {
       plate(c, 50, 80, 44, 12);
       ts(c, E(50, 66, 36, 20), '#C98240', { flat: true });
@@ -736,7 +440,7 @@ const D = [
       ts(c, R(34, 60, 5, 10, 2.5), '#FFFBF0', { off: 1, lw: 2 });
       steam(c, [44, 56], 30);
     }],
-  ['funnel-cake', 'Funnel Cake', 'pastries', ['mix', 'stove', 'decor'], 'Tangled fried dough ribbons dusted heavily with powdered sugar.',
+  ['funnel-cake', 'Funnel Cake', 'pastries', 'Tangled fried dough ribbons dusted heavily with powdered sugar.',
     (c, r) => {
       plate(c, 50, 74, 46, 16, '#AFD6EC');
       const rand = r;
@@ -754,7 +458,7 @@ const D = [
       dots(c, rand, 120, inEll(50, 62, 30, 11), '#FFFBF0', 1.3);
       cloud(c, [[44, 58, 5], [52, 57, 5.5], [58, 60, 4]], '#FFFBF0', { lw: 1.6 });
     }],
-  ['apple-fritters', 'Apple Fritters', 'pastries', ['mix', 'stove', 'decor'], 'Craggy golden-fried dough with apple chunks and glaze.',
+  ['apple-fritters', 'Apple Fritters', 'pastries', 'Craggy golden-fried dough with apple chunks and glaze.',
     (c, r) => {
       plate(c, 50, 80, 44, 12);
       const blobP = (cx, cy, rad, seed) => (cc) => {
@@ -781,7 +485,7 @@ const D = [
         c.restore();
       }
     }],
-  ['blueberry-muffins', 'Blueberry Muffins', 'pastries', ['mix', 'bake'], 'Domed, sugar-crusted tops with purple-blue berry bursts.',
+  ['blueberry-muffins', 'Blueberry Muffins', 'pastries', 'Domed, sugar-crusted tops with purple-blue berry bursts.',
     (c, r) => {
       ts(c, P([[26, 58], [74, 58], [68, 90], [32, 90]]), '#86BADB', { off: 2 });
       for (const x of [36, 43, 50, 57, 64]) line(c, [[x, 60], [x - (x - 50) * 0.15, 88]], 1.4, '#5F97BE');
@@ -796,7 +500,7 @@ const D = [
       for (const [x, y] of [[36, 46], [52, 40], [64, 50], [46, 55], [58, 58], [30, 56]]) ts(c, Ci(x, y, 3.8), '#6D63B5', { off: 1, lw: 1.8 });
       dots(c, r, 30, (q) => [26 + q() * 48, 34 + q() * 24], '#FFFBF0', 0.9);
     }],
-  ['beignets', 'Beignets', 'pastries', ['mix', 'stove', 'decor'], 'Puffy squares buried under a mountain of powdered sugar.',
+  ['beignets', 'Beignets', 'pastries', 'Puffy squares buried under a mountain of powdered sugar.',
     (c, r) => {
       plate(c, 50, 78, 44, 13);
       for (const [x, y, rot] of [[34, 64, -0.2], [64, 64, 0.25], [50, 52, 0.05]]) {
@@ -809,7 +513,7 @@ const D = [
       cloud(c, [[50, 46, 12], [38, 52, 9], [62, 52, 9], [30, 60, 6], [70, 60, 6], [50, 36, 8], [44, 58, 7], [56, 58, 7]], '#FFFBF0', { shade: 0.07 });
       dots(c, r, 40, inEll(50, 70, 36, 8), '#FFFBF0', 1);
     }],
-  ['bread-pudding', 'Bread Pudding', 'pastries', ['mix', 'bake', 'decor'], 'Cubed golden bread baked custardy, drizzled with caramel sauce.',
+  ['bread-pudding', 'Bread Pudding', 'pastries', 'Cubed golden bread baked custardy, drizzled with caramel sauce.',
     (c, r) => dish(c, {
       dish: '#F7B9C4', fill: '#F3D08A',
       detail: (cc, rr) => {
@@ -822,7 +526,7 @@ const D = [
     }, r)],
 
   // Cold & Frozen
-  ['sundae', 'Ice Cream Sundae', 'cold', ['fridge', 'decor'], 'Vanilla scoops, hot fudge, whipped cream and a red cherry.',
+  ['sundae', 'Ice Cream Sundae', 'cold', 'Vanilla scoops, hot fudge, whipped cream and a red cherry.',
     (c) => {
       glassBowl(c, 50, 50, 30);
       scoop(c, 38, 48, 12, '#FFF1D6');
@@ -846,7 +550,7 @@ const D = [
       cloud(c, [[50, 24, 7], [44, 26, 5], [56, 26, 5]], '#FFFBF0');
       cherry(c, 50, 15, 5.5);
     }],
-  ['milkshake', 'Milkshake', 'cold', ['fridge', 'mix'], 'A tall frosted glass with a whipped cream crown, cherry and striped straw.',
+  ['milkshake', 'Milkshake', 'cold', 'A tall frosted glass with a whipped cream crown, cherry and striped straw.',
     (c) => {
       // straw
       c.save();
@@ -874,7 +578,7 @@ const D = [
       cloud(c, [[36, 32, 8], [50, 30, 9], [64, 32, 8], [44, 22, 7], [56, 22, 7], [50, 15, 5]], '#FFFBF0');
       cherry(c, 50, 10, 5);
     }],
-  ['banana-pudding', 'Banana Pudding', 'cold', ['mix', 'fridge'], 'Layered in a glass dish with vanilla wafers, banana slices and whipped cream.',
+  ['banana-pudding', 'Banana Pudding', 'cold', 'Layered in a glass dish with vanilla wafers, banana slices and whipped cream.',
     (c) => {
       const glass = R(16, 38, 68, 48, 10);
       ts(c, glass, '#FFF3DC', { off: 2 });
@@ -901,7 +605,7 @@ const D = [
       ts(c, E(40, 26, 6, 3.8, -0.3), '#E4B06A', { off: 1, lw: 1.8 });
       ts(c, E(60, 25, 6, 3.8, 0.3), '#E4B06A', { off: 1, lw: 1.8 });
     }],
-  ['banana-split', 'Banana Split', 'cold', ['fridge', 'decor'], 'Three scoops between a banana, with syrups, nuts and cherries.',
+  ['banana-split', 'Banana Split', 'cold', 'Three scoops between a banana, with syrups, nuts and cherries.',
     (c, r) => {
       const boat = (cc) => { cc.beginPath(); cc.moveTo(6, 60); cc.quadraticCurveTo(50, 98, 94, 60); cc.closePath(); };
       ts(c, boat, '#AFD6EC', { gloss: [26, 66, 5] });
@@ -924,7 +628,7 @@ const D = [
       cherry(c, 50, 32, 4.5);
       cherry(c, 72, 36, 4.2);
     }],
-  ['root-beer-float', 'Root Beer Float', 'cold', ['fridge'], 'A frosty mug with foamy vanilla ice cream on top.',
+  ['root-beer-float', 'Root Beer Float', 'cold', 'A frosty mug with foamy vanilla ice cream on top.',
     (c) => {
       tube(c, [[70, 48], [84, 50], [84, 70], [70, 74]], '#E9F5FA', 6, { lw: 2.6 });
       const mug = R(22, 38, 50, 52, 8);
@@ -949,7 +653,7 @@ const D = [
       ts(c, R(-2.5, -16, 5, 22, 2.5), '#E4605E', { off: 1, lw: 2 });
       c.restore();
     }],
-  ['baked-alaska', 'Baked Alaska', 'cold', ['fridge', 'bake'], 'A toasted golden meringue dome over ice cream and cake.',
+  ['baked-alaska', 'Baked Alaska', 'cold', 'A toasted golden meringue dome over ice cream and cake.',
     (c) => {
       plate(c, 50, 80, 44, 12);
       cylinder(c, 50, 72, 32, 9, 6, '#E4AC62', null);
@@ -970,7 +674,7 @@ const D = [
         c.fill();
       }
     }],
-  ['ice-cream-sandwich', 'Ice Cream Sandwich', 'cold', ['bake', 'fridge'], 'Vanilla ice cream between two chocolate wafer cookies.',
+  ['ice-cream-sandwich', 'Ice Cream Sandwich', 'cold', 'Vanilla ice cream between two chocolate wafer cookies.',
     (c) => {
       prism(c, 14, 44, 50, 34, 34, '#5A3422', [['#5A3422', 0.26], ['#FFF6E0', 0.48], ['#5A3422', 0.26]], null);
       c.fillStyle = '#3F2216';
@@ -982,7 +686,7 @@ const D = [
     }],
 
   // Candy & Campfire
-  ['smores', "S'mores", 'candy', ['stove'], 'A toasted marshmallow, melted chocolate and graham crackers.',
+  ['smores', "S'mores", 'candy', 'A toasted marshmallow, melted chocolate and graham crackers.',
     (c, r) => {
       prism(c, 16, 64, 50, 10, 30, '#DDA55E', '#D09550', null);
       prism(c, 20, 58, 40, 6, 24, '#5A3422', '#4E2C1C', null);
@@ -998,7 +702,7 @@ const D = [
       c.restore();
       dots(c, r, 10, (q) => [26 + q() * 50, 22 + q() * 12], '#B87A43', 1.1);
     }],
-  ['caramel-apple', 'Caramel Apple', 'candy', ['stove', 'decor'], 'Glossy caramel coating and a crushed nut topping on a stick.',
+  ['caramel-apple', 'Caramel Apple', 'candy', 'Glossy caramel coating and a crushed nut topping on a stick.',
     (c, r) => {
       ts(c, E(50, 86, 34, 8), '#FFFBF0', { off: 1 });
       ts(c, R(46, 6, 8, 36, 3), '#E8BC7A', { off: 1.5 });
@@ -1034,7 +738,7 @@ const D = [
       c.strokeStyle = INK;
       c.stroke();
     }],
-  ['fudge', 'Chocolate Fudge', 'candy', ['stove', 'fridge'], 'Smooth, glossy squares stacked on wax paper.',
+  ['fudge', 'Chocolate Fudge', 'candy', 'Smooth, glossy squares stacked on wax paper.',
     (c) => {
       ts(c, P([[8, 78], [70, 88], [94, 70], [34, 62]]), '#FFFBF0', { off: 1 });
       prism(c, 22, 60, 30, 16, 22, '#7A4A30', '#5A3422', '#5A3422');
@@ -1043,7 +747,7 @@ const D = [
       c.fillStyle = 'rgba(255,251,240,0.6)';
       for (const [x, y] of [[40, 38], [28, 56], [54, 58]]) c.fillRect(x, y, 10, 1.6);
     }],
-  ['pralines', 'Pralines', 'candy', ['stove'], 'Round pecan candies with a creamy, sugary caramel surface.',
+  ['pralines', 'Pralines', 'candy', 'Round pecan candies with a creamy, sugary caramel surface.',
     (c, r) => {
       ts(c, E(50, 72, 46, 16), '#FFFBF0', { off: 1 });
       for (const [x, y, s] of [[64, 46, 0.85], [34, 52, 0.9], [52, 66, 1]]) {
@@ -1063,7 +767,7 @@ const D = [
         pecanHalf(c, x + 6 * s, y - 2 * s, -0.5, 0.7 * s);
       }
     }],
-  ['cotton-candy', 'Cotton Candy', 'candy', ['stove'], 'A fluffy pink-and-blue cloud on a paper cone.',
+  ['cotton-candy', 'Cotton Candy', 'candy', 'A fluffy pink-and-blue cloud on a paper cone.',
     (c) => {
       const cone = P([[38, 60], [62, 60], [50, 96]]);
       ts(c, cone, '#FFFBF0', { off: 1.5 });
@@ -1089,7 +793,190 @@ const D = [
     }],
 ];
 
-export const DESSERTS = D.map(([id, name, cat, steps, desc, draw], i) => ({ id, name, cat, steps, desc, draw, n: i + 1 }));
+// ------------------------------------------------------------------ toppings
+
+function pipingBag(c, col) {
+  const bag = (cc) => {
+    cc.beginPath();
+    cc.moveTo(26, 22);
+    cc.quadraticCurveTo(50, 8, 74, 22);
+    cc.lineTo(55, 74);
+    cc.lineTo(45, 74);
+    cc.closePath();
+  };
+  ts(c, bag, col, { gloss: [40, 30, 5] });
+  ts(c, P([[44, 72], [56, 72], [53, 86], [47, 86]]), '#FFE08A', { off: 1, lw: 2.4 });
+  for (const x of [46.5, 50, 53.5]) line(c, [[x, 76], [x, 85]], 1.1, '#C99A3A');
+  tube(c, [[30, 22], [50, 16], [70, 22]], col, 4, { lw: 1.6 });
+}
+
+const TOPPING_ART = {
+  whipped: (c) => cloud(c, [[50, 66, 17], [32, 70, 11], [68, 70, 11], [41, 50, 12], [59, 50, 12], [50, 34, 10], [50, 22, 5]], '#FFFBF0'),
+  frosting: (c) => pipingBag(c, '#FFF3DC'),
+  fudge: (c, r) => {
+    ts(c, R(68, 44, 22, 7, 3), '#8A5A3B', { off: 1.5 });
+    cylinder(c, 44, 44, 28, 9, 30, '#E8893A', '#5A3422');
+    for (const [x, l] of [[28, 10], [40, 16], [54, 12]]) ts(c, R(x, 47, 6, l, 3), '#5A3422', { off: 1, lw: 2 });
+    dots(c, r, 5, inEll(44, 43, 20, 5), '#8A5A3B', 1.5);
+  },
+  pink: (c) => pipingBag(c, '#F7B9C4'),
+  glaze: (c) => {
+    cylinder(c, 50, 50, 32, 11, 22, '#AFD6EC', '#FFF6E6');
+    tube(c, [[56, 22], [62, 40], [58, 50]], '#E8BC7A', 4, { lw: 1.8 });
+    ts(c, E(46, 50, 14, 4), '#FFFFFF', { flat: true, lw: 0 });
+  },
+  sprinkles: (c, r) => {
+    ts(c, R(30, 34, 40, 54, 10), '#E9F5FA', { gloss: [38, 48, 4] });
+    ts(c, R(28, 22, 44, 14, 6), '#EE93A6', { off: 1.5 });
+    for (const x of [40, 50, 60]) ts(c, Ci(x, 28, 2), '#6A4029', { flat: true, lw: 0 });
+    sprinkles(c, r, 26, (q) => [36 + q() * 28, 44 + q() * 40]);
+  },
+  cherry: (c) => { cherry(c, 38, 62, 13); cherry(c, 64, 66, 12); },
+  strawberry: (c) => { strawberry(c, 38, 56, 2.1); strawberry(c, 64, 62, 1.8); },
+  nuts: (c) => {
+    for (const [x, y, rot] of [[34, 62, 0.4], [58, 66, -0.3], [46, 48, 0.1], [66, 46, 0.7], [30, 42, -0.5]]) pecanHalf(c, x, y, rot, 2);
+  },
+  powdered: (c, r) => {
+    ts(c, P([[24, 30], [76, 30], [66, 62], [34, 62]]), '#E8BC7A', { off: 2 });
+    ts(c, R(20, 24, 60, 10, 5), '#D9A05B', { off: 1.5 });
+    for (const x of [34, 42, 50, 58, 66]) line(c, [[x, 36], [x + (50 - x) * 0.15, 60]], 1.2, '#B97A43');
+    ts(c, R(78, 38, 16, 6, 3), '#D9A05B', { off: 1 });
+    dots(c, r, 40, (q) => [34 + q() * 32, 66 + q() * 26], '#FFFBF0', 1.6);
+    cloud(c, [[50, 88, 7], [40, 90, 5], [60, 90, 5]], '#FFFBF0', { lw: 2 });
+  },
+  caramel: (c) => {
+    ts(c, R(34, 34, 32, 52, 12), '#D9822F', { gloss: [42, 46, 5] });
+    ts(c, P([[40, 34], [60, 34], [54, 20], [46, 20]]), '#FFF3DC', { off: 1.5 });
+    ts(c, R(47, 8, 6, 14, 3), '#FFF3DC', { off: 1, lw: 2.2 });
+    ts(c, R(38, 54, 24, 16, 4), '#FFF3DC', { off: 1, lw: 1.8 });
+    ts(c, R(44, 84, 6, 10, 3), '#D9822F', { off: 1, lw: 2 });
+  },
+  shavings: (c) => {
+    for (const [x, y, rot] of [[34, 40, 0.3], [58, 34, -0.4], [46, 60, 0.9], [68, 58, 0.2], [30, 70, -0.8]]) {
+      c.save();
+      c.translate(x, y);
+      c.rotate(rot);
+      ts(c, R(-12, -5, 24, 10, 5), '#6A4029', { off: 1.5 });
+      line(c, [[-8, 0], [8, 0]], 1.4, '#A06A48');
+      c.restore();
+    }
+  },
+};
+
+export const TOPPINGS = [
+  ['whipped', 'Whipped Cream', '1', '#FFFBF0'],
+  ['frosting', 'Frosting', '2', '#FFF3DC'],
+  ['fudge', 'Hot Fudge', '3', '#5A3422'],
+  ['pink', 'Pink Icing', '4', '#F7B9C4'],
+  ['glaze', 'Sugar Glaze', '5', '#FFF6E6'],
+  ['sprinkles', 'Sprinkles', '6', '#EE93A6'],
+  ['cherry', 'Cherries', '7', '#E4605E'],
+  ['strawberry', 'Strawberries', '8', '#E4605E'],
+  ['nuts', 'Chopped Nuts', '9', '#95512A'],
+  ['powdered', 'Powdered Sugar', '0', '#FFFBF0'],
+  ['caramel', 'Caramel', '-', '#D9822F'],
+  ['shavings', 'Chocolate Curls', '=', '#6A4029'],
+].map(([id, name, key, color], i) => ({ id, name, key, color, draw: TOPPING_ART[id], n: 90 + i }));
+export const TOPPING_BY_ID = Object.fromEntries(TOPPINGS.map((t) => [t.id, t]));
+
+const topUrl = new Map();
+export function toppingURL(t) {
+  if (!topUrl.has(t.id)) topUrl.set(t.id, drawSticker(96, t.draw, t.n).toDataURL());
+  return topUrl.get(t.id);
+}
+
+// ------------------------------------------------------------------ recipes
+// Every recipe is a little card of steps. Gathering happens at the storage
+// corner; the rest happens at the matching station.
+
+const gather = (...items) => ({ t: 'gather', items });
+const mix = (label = 'Mix the batter') => ({ t: 'mix', label });
+const prep = (label, mode = 'tap', n = 6) => ({ t: 'prep', label, mode, n });
+const bake = (label = 'Bake until golden', dur = 10) => ({ t: 'bake', label, dur });
+const cook = (label = 'Cook on the stove', dur = 9) => ({ t: 'cook', label, dur });
+const chill = (label = 'Chill in the freezer', dur = 7) => ({ t: 'chill', label, dur });
+const decor = (...tops) => ({ t: 'decor', tops });
+
+const RECIPES = {
+  'apple-pie': [gather('flour', 'butter', 'apples', 'cinnamon'), mix('Knead the dough'), prep('Roll & fill the crust', 'roll'), bake()],
+  'pecan-pie': [gather('flour', 'butter'), mix('Knead the dough'), prep('Roll the crust', 'roll'), gather('nuts', 'caramel', 'eggs'), prep('Arrange the pecans', 'tap', 6), bake()],
+  'key-lime-pie': [gather('graham', 'butter'), prep('Press the crust', 'tap', 5), gather('limes', 'milk', 'eggs'), mix('Whisk the lime filling'), chill('Chill until set'), decor('whipped')],
+  'pumpkin-pie': [gather('flour', 'butter', 'pumpkin', 'cinnamon'), mix('Blend the filling'), prep('Roll & fill the crust', 'roll'), bake(), decor('whipped')],
+  'cherry-pie': [gather('flour', 'butter', 'cherries', 'sugar'), mix('Knead the dough'), prep('Weave the lattice', 'tap', 6), bake()],
+  'banana-cream-pie': [gather('flour', 'butter', 'bananas', 'milk'), mix('Stir the custard'), prep('Roll the crust & layer bananas', 'roll'), bake(), decor('whipped', 'shavings')],
+  'blueberry-pie': [gather('flour', 'butter', 'blueberries', 'sugar'), mix('Knead the dough'), prep('Weave the lattice', 'tap', 6), bake()],
+  'sweet-potato-pie': [gather('flour', 'butter', 'sweet-potato', 'cinnamon'), mix('Mash & blend'), prep('Roll & fill the crust', 'roll'), bake()],
+  'mud-pie': [gather('chocolate', 'butter', 'eggs', 'cream'), mix('Whisk the fudge filling'), prep('Press the cookie crust', 'tap', 5), bake(), chill('Chill until set'), decor('whipped', 'shavings')],
+  'peach-cobbler': [gather('peaches', 'sugar', 'flour', 'butter'), prep('Slice the peaches', 'tap', 6), mix('Crumble the biscuit topping'), bake()],
+  'apple-crisp': [gather('apples', 'oats', 'sugar', 'butter'), prep('Slice the apples', 'tap', 6), mix('Crumble the oat topping'), bake()],
+
+  'cheesecake': [gather('graham', 'butter'), prep('Press the crust', 'tap', 5), gather('cream-cheese', 'eggs', 'sugar'), mix('Beat until silky'), bake('Bake gently'), chill('Chill until firm'), decor('strawberry')],
+  'cupcake': [gather('flour', 'butter', 'eggs', 'sugar'), mix('Whisk the batter'), prep('Fill the liners', 'tap', 6), bake(), decor('frosting', 'sprinkles', 'cherry')],
+  'red-velvet': [gather('flour', 'chocolate', 'eggs', 'cream-cheese'), mix('Whisk the red batter'), bake(), chill('Cool the layers'), decor('frosting')],
+  'boston-cream': [gather('flour', 'eggs', 'milk', 'sugar'), mix('Whisk the sponge'), bake(), prep('Fill with custard', 'tap', 4), decor('fudge')],
+  'carrot-cake': [gather('flour', 'carrots', 'eggs', 'cream-cheese'), prep('Grate the carrots', 'wiggle'), mix('Fold the batter'), bake(), decor('frosting', 'nuts')],
+  'devils-food': [gather('flour', 'chocolate', 'eggs', 'sugar'), mix('Whisk the batter'), bake(), prep('Stack the layers', 'tap', 3), decor('fudge')],
+  'pineapple-upside-down': [gather('flour', 'eggs', 'butter', 'sugar'), mix('Whisk the batter'), gather('pineapple', 'cherries'), prep('Arrange the rings', 'tap', 5), bake()],
+  'german-chocolate': [gather('flour', 'chocolate', 'eggs', 'butter'), mix('Whisk the batter'), bake(), gather('coconut', 'nuts'), prep('Spread the coconut-pecan filling', 'wiggle')],
+  'angel-food': [gather('flour', 'eggs', 'sugar'), mix('Whip the egg whites'), bake(), chill('Cool upside down'), decor('powdered')],
+  'pound-cake': [gather('flour', 'butter', 'sugar', 'eggs'), mix('Cream the batter'), prep('Pour into the loaf pan', 'hold'), bake(), decor('glaze')],
+  'strawberry-shortcake': [gather('flour', 'butter', 'strawberries', 'sugar'), mix('Mix the biscuit dough'), bake(), prep('Split & layer the berries', 'tap', 4), decor('whipped')],
+  'whoopie-pies': [gather('flour', 'chocolate', 'butter', 'marshmallows'), mix('Whisk the batter'), prep('Scoop the rounds', 'tap', 6), bake(), prep('Sandwich the filling', 'tap', 3)],
+
+  'chocolate-chip': [gather('flour', 'butter', 'sugar', 'chocolate'), mix('Cream the dough'), prep('Scoop cookie balls', 'tap', 6), bake()],
+  'brownies': [gather('chocolate', 'butter', 'eggs', 'sugar'), mix('Whisk the batter'), prep('Pour into the pan', 'hold'), bake(), prep('Cut into squares', 'tap', 4)],
+  'snickerdoodles': [gather('flour', 'butter', 'sugar', 'cinnamon'), mix('Cream the dough'), prep('Roll in cinnamon sugar', 'tap', 6), bake()],
+  'lemon-bars': [gather('flour', 'butter', 'lemons', 'eggs'), mix('Whisk the lemon curd'), prep('Layer on the shortbread', 'tap', 4), bake(), decor('powdered')],
+  'rice-krispies': [gather('butter', 'marshmallows', 'crispy-rice'), cook('Melt the marshmallows'), prep('Press into the pan', 'tap', 5), chill('Let it set')],
+  'oatmeal-raisin': [gather('oats', 'raisins', 'flour', 'butter'), mix('Stir the dough'), prep('Scoop cookie balls', 'tap', 6), bake()],
+  'peanut-butter': [gather('peanut-butter', 'flour', 'sugar', 'eggs'), mix('Cream the dough'), prep('Press the fork crisscross', 'tap', 6), bake()],
+  'sugar-cookies': [gather('flour', 'butter', 'sugar', 'eggs'), mix('Cream the dough'), prep('Roll & cut shapes', 'roll'), bake(), decor('pink', 'sprinkles')],
+
+  'glazed-donuts': [gather('flour', 'milk', 'eggs', 'sugar'), mix('Knead the dough'), prep('Cut the donut rings', 'tap', 5), cook('Fry until golden'), decor('glaze', 'sprinkles')],
+  'cinnamon-rolls': [gather('flour', 'butter', 'cinnamon', 'sugar'), mix('Knead the dough'), prep('Roll & swirl', 'roll'), bake(), decor('frosting')],
+  'funnel-cake': [gather('flour', 'milk', 'eggs', 'sugar'), mix('Whisk the batter'), cook('Swirl into the hot oil'), decor('powdered')],
+  'apple-fritters': [gather('flour', 'apples', 'cinnamon', 'milk'), prep('Chop the apples', 'tap', 6), mix('Fold the batter'), cook('Fry until crisp'), decor('glaze')],
+  'blueberry-muffins': [gather('flour', 'blueberries', 'eggs', 'sugar'), mix('Fold in the berries'), prep('Fill the muffin cups', 'tap', 6), bake()],
+  'beignets': [gather('flour', 'milk', 'eggs', 'sugar'), mix('Knead the dough'), prep('Cut little squares', 'tap', 6), cook('Fry until puffy'), decor('powdered')],
+  'bread-pudding': [gather('bread', 'eggs', 'milk', 'sugar'), prep('Cube the bread', 'tap', 6), mix('Soak in custard'), bake(), decor('caramel')],
+
+  'sundae': [gather('ice-cream'), prep('Scoop the ice cream', 'wiggle'), decor('fudge', 'whipped', 'cherry')],
+  'milkshake': [gather('ice-cream', 'milk'), mix('Blend until thick'), chill('Frost the glass'), decor('whipped', 'cherry')],
+  'banana-pudding': [gather('bananas', 'milk', 'eggs', 'sugar'), cook('Stir the custard'), prep('Layer wafers & bananas', 'tap', 5), chill('Chill until set'), decor('whipped')],
+  'banana-split': [gather('bananas', 'ice-cream'), prep('Split & scoop', 'tap', 5), decor('fudge', 'nuts', 'cherry')],
+  'root-beer-float': [gather('root-beer', 'ice-cream'), chill('Frost the mug'), prep('Pour & float a scoop', 'hold')],
+  'baked-alaska': [gather('ice-cream', 'flour', 'eggs', 'sugar'), mix('Whip the meringue'), chill('Freeze the dome'), bake('Toast the meringue', 7)],
+  'ice-cream-sandwich': [gather('flour', 'chocolate', 'butter'), mix('Mix the wafer dough'), bake(), gather('ice-cream'), prep('Sandwich & press', 'tap', 3), chill('Freeze until firm')],
+
+  'smores': [gather('graham', 'chocolate', 'marshmallows'), cook('Toast the marshmallow'), prep('Squish it together', 'tap', 3)],
+  'caramel-apple': [gather('apples', 'caramel'), cook('Melt the caramel'), prep('Dip & twirl', 'wiggle'), decor('nuts')],
+  'fudge': [gather('chocolate', 'sugar', 'butter', 'milk'), cook('Stir the fudge'), prep('Pour into the pan', 'hold'), chill('Let it set'), prep('Cut into squares', 'tap', 4)],
+  'pralines': [gather('nuts', 'sugar', 'butter', 'cream'), cook('Cook the caramel'), prep('Spoon onto wax paper', 'tap', 5)],
+  'cotton-candy': [gather('sugar'), cook('Melt the sugar'), prep('Spin the floss', 'wiggle')],
+};
+
+// batter/dough color shown in the bowl after mixing
+const CAT_BATTER = { pies: '#F3D9A6', cookies: '#E9C27E', pastries: '#F6DDA0', cakes: '#F8DE9C', cold: '#FFF1D6', candy: '#E3A45C' };
+const BATTER = {
+  'mud-pie': '#5A3422', 'red-velvet': '#B8323F', 'devils-food': '#5A3422', 'german-chocolate': '#6A4029',
+  'brownies': '#5A3422', 'whoopie-pies': '#5A3422', 'chocolate-chip': '#E3B06E', 'key-lime-pie': '#DDEBA2',
+  'lemon-bars': '#FFE066', 'pumpkin-pie': '#E8893A', 'sweet-potato-pie': '#D9824A', 'banana-cream-pie': '#FFE9A0',
+  'milkshake': '#F7B9C4', 'ice-cream-sandwich': '#5A3422', 'fudge': '#5A3422', 'peanut-butter': '#D9A05B',
+  'carrot-cake': '#E39A5A', 'bread-pudding': '#F3D08A', 'cheesecake': '#FFF1D0', 'baked-alaska': '#FFF6E6',
+};
+
+function stepLabel(s) {
+  if (s.label) return s.label;
+  if (s.t === 'gather') return 'Gather ingredients';
+  if (s.t === 'decor') return 'Decorate';
+  return STATIONS[STEP_STATION[s.t]].short;
+}
+
+export const DESSERTS = D.map(([id, name, cat, desc, draw], i) => {
+  const steps = RECIPES[id].map((s) => ({ ...s, label: stepLabel(s), station: STEP_STATION[s.t] }));
+  const ingredients = [...new Set(steps.filter((s) => s.t === 'gather').flatMap((s) => s.items))];
+  return { id, name, cat, desc, draw, n: i + 1, steps, ingredients, batter: BATTER[id] || CAT_BATTER[cat] };
+});
 export const BY_ID = Object.fromEntries(DESSERTS.map((d) => [d.id, d]));
 
 // ------------------------------------------------------------------ rendering

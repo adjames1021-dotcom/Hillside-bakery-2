@@ -47,4 +47,12 @@ export const sfx = {
   whoosh: () => tone(300, 0.2, { type: 'sine', slide: 0.4, vol: 0.1 }),
   unlock: () => [523, 659, 784, 1046].forEach((f, i) => tone(f, 0.3, { type: 'triangle', delay: i * 0.09, vol: 0.1 })),
   sad: () => { tone(392, 0.25, { type: 'triangle', vol: 0.08 }); tone(330, 0.35, { type: 'triangle', delay: 0.18, vol: 0.08 }); },
+  chop: () => { tone(180, 0.06, { type: 'square', vol: 0.05, slide: 0.6 }); tone(900, 0.03, { type: 'triangle', vol: 0.04 }); },
+  whisk: () => tone(620 + Math.random() * 160, 0.05, { type: 'sine', vol: 0.03, slide: 1.3 }),
+  stir: () => { tone(260, 0.18, { type: 'sine', vol: 0.08, slide: 1.4 }); tone(390, 0.18, { type: 'sine', delay: 0.08, vol: 0.06 }); },
+  alarm: () => { tone(880, 0.12, { type: 'triangle', vol: 0.09 }); tone(880, 0.12, { type: 'triangle', delay: 0.18, vol: 0.09 }); },
+  step: () => tone(150 + Math.random() * 40, 0.05, { type: 'sine', vol: 0.025 }),
+  star: (n = 3) => [659, 784, 988].slice(0, n).forEach((f, i) => tone(f, 0.22, { type: 'triangle', delay: i * 0.1, vol: 0.09 })),
+  door: () => tone(240, 0.16, { type: 'triangle', vol: 0.06, slide: 1.5 }),
+  frost: () => { tone(1500, 0.2, { type: 'sine', vol: 0.03, slide: 1.2 }); tone(1900, 0.2, { type: 'sine', delay: 0.06, vol: 0.02 }); },
 };

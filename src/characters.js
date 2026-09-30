@@ -1,6 +1,7 @@
 // Chibi animals: big round heads, tiny bodies, dot eyes, blush, small smiles.
 import * as THREE from 'three';
 import { G, C, INK, mk, toon, canvasTex, blob } from './toon.js';
+import { mergeStatic } from './merge.js';
 
 const HEAD_Y = 0.9;
 const HEAD_R = 0.4;
@@ -174,7 +175,7 @@ export function makeAnimal(kind, o = {}) {
     e.add(hl);
     eyes.push(e);
     const b = onHead(sx * 0.25, -0.08, 0.004);
-    const blush = new THREE.Mesh(G.circle(0.065), toon(C.pinkDeep, { transparent: true, opacity: 0.9 }));
+    const blush = new THREE.Mesh(G.circle(0.065), toon(C.pinkDeep));
     blush.position.copy(b.pos);
     orientTo(blush, b.n);
     blush.scale.set(1, 0.62, 1);
@@ -261,6 +262,11 @@ export function makeAnimal(kind, o = {}) {
     if (m.isMesh && !m.userData.outline) m.castShadow = true;
   });
 
+  // batch the rigid parts: animated limbs, head, eyes and smile stay separate
+  for (const o of [...feet, ...arms, tail, headG, ...eyes, smile]) if (o) o.userData.dynamic = true;
+  mergeStatic(headG);
+  mergeStatic(bob);
+
   return {
     kind, root, bob, headG, head, eyes, smile, arms, feet, tail, shadow,
     blinkT: 1 + Math.random() * 3,
@@ -268,8 +274,8 @@ export function makeAnimal(kind, o = {}) {
   };
 }
 
-/** Per-frame animation: walking bounce, idle breathing, blinking. */
-export function animateAnimal(a, dt, t, moving, mood = 1) {
+/** Per-frame animation: walking bounce, idle breathing, blinking, waving, looking. */
+export function animateAnimal(a, dt, t, moving, mood = 1, extra = {}) {
   a.blinkT -= dt;
   const blinking = a.blinkT < 0.12;
   if (a.blinkT < 0) a.blinkT = 2 + Math.random() * 3.5;
@@ -297,4 +303,14 @@ export function animateAnimal(a, dt, t, moving, mood = 1) {
   }
   if (a.tail) a.tail.rotation.z = Math.sin(t * 3 + a.root.id) * 0.25;
   a.headG.rotation.z = Math.sin(t * 1.3 + a.root.id) * 0.03;
+  const look = Math.max(-0.9, Math.min(0.9, extra.look || 0));
+  a.headG.rotation.y += (look - a.headG.rotation.y) * Math.min(1, dt * 6);
+  const arm = a.arms[1];
+  if (extra.wave) {
+    arm.position.y = 0.5;
+    arm.rotation.z = -0.5 + Math.sin(t * 12) * 0.45;
+  } else {
+    arm.position.y += (0.38 - arm.position.y) * Math.min(1, dt * 8);
+    if (!moving) arm.rotation.z += (0.5 - arm.rotation.z) * Math.min(1, dt * 8);
+  }
 }

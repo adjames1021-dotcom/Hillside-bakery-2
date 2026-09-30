@@ -1,53 +1,63 @@
 # Hillside Bakery
 
-A cozy little bakery game in a toon diorama. Walk your fox baker around a tiny hillside shop,
-bake 50 classic American desserts and serve them to chibi cat, bunny, bear and puppy customers.
+A cozy first-person baking game in a toon bakery. You're a little fox baker: take orders from chibi cat, bunny, bear and puppy customers, gather ingredients from **Dry Storage** and **Cold Storage**, work each recipe card step by step at the kitchen stations and the center **prep island**, then serve the finished dessert at their table.
+
+The full design brief is in [PROMPT.md](PROMPT.md).
 
 ## Play
 
-The game is static files (ES modules + Three.js from a CDN), so serve the folder over HTTP:
+The game is static files (ES modules plus Three.js from a CDN), so serve the folder over HTTP:
 
 ```sh
 python3 -m http.server 8000
 # then open http://localhost:8000
 ```
 
-| Action | Keyboard | Touch |
+| Action | Keyboard / mouse | Touch |
 | --- | --- | --- |
-| Walk | WASD / arrow keys | left joystick |
-| Use (pantry, stations, customers) | E, Space or Enter | **Use** button |
+| Look | Mouse (click to lock the pointer) | Drag the screen |
+| Walk | WASD / arrow keys | Left joystick |
+| Use (take order, grab, place, serve) | E, Space or click | **Use** button |
+| Pick a ticket | 1–4 or click it | Tap a ticket |
 | Recipe book | R | **Recipes** button |
-| Switch diorama / first-person "Baker's eyes" view | V | **Baker's eyes** button |
+| Step back from a station | Q | **Step back** |
 
-In Baker's eyes view, W/S walk, A/D turn, and dragging looks around.
+## How a recipe works
 
-## How it works
+1. A customer sits down with a **!** bubble. Look at them and press E to take the order. A ticket appears with the recipe card.
+2. **Gather** the listed ingredients. Dry goods and produce are on the left wall and the front crates. Dairy, berries, citrus and ice cream are in the glass Cold Storage.
+3. Follow the card:
+   - **Mixing Bowl:** wiggle the mouse or tap to knead, whisk or whip.
+   - **Prep Island:** roll, chop, scoop, fill or pour.
+   - **Oven:** take it out while the gauge is golden. Toasty or burnt costs stars.
+   - **Stove:** stir when the pot calls, or it scorches.
+   - **Freezer:** chill and set.
+   - **Decorating Table:** add the toppings from the card, in order.
+4. Serve it for coins, hearts and a 1–3 star rating. Stations keep working on their own, so you can juggle orders, and the island has two spots for setting things down.
 
-1. A customer walks in and sits down with an order bubble and a patience bar.
-2. Open the recipe book at the **pantry shelf** and pick the treat.
-3. Carry it through its stations: Mixing Bowl, Oven, Stove, Fridge and Decorating Table.
-   Each station works on its own, so you can start one treat while another bakes.
-4. Pick up the finished treat and bring it to the customer for coins and hearts.
+Serving treats unlocks new sections: Pastries at 3 served, Cakes at 6, Cold & Frozen at 10, Candy & Campfire at 14. Coins and progress are saved in the browser.
 
-Serving treats unlocks new menu sections: Pies & Cobblers and Cookies & Bars at the start,
-then Pastries & Fried Treats, Cakes, Cold & Frozen, and Candy & Campfire.
-Coins and progress are saved in the browser.
+## Look and tech
 
-## Look
-
-- `MeshToonMaterial` with a 4-step gradient map, one warm sun from the upper left plus a hemisphere light, soft baked shadows
-- Inverted-hull outlines in `#4B2E1D`, pushed out in screen space so lines stay the same pixel width
-- `RoundedBoxGeometry` and rounded lathe shapes for chunky, vinyl-toy furniture
-- Orthographic camera at a 35° isometric angle over a cutaway room on a thick slab
-- Additive sprite glows for string lights, sconces and the oven; flat canvas textures for wallpaper, gingham and labels
-- Every dessert is a hand-coded canvas sticker (`src/desserts.js`)
+- `MeshToonMaterial` with a 4-step gradient; one warm sun and a hemisphere light, plus warm pendant point lights; the shadow map is baked once.
+- Inverted-hull outlines in `#4B2E1D`, pushed out in screen space with smoothed normals, thinning with distance in first person. A butter-yellow highlight hull marks what the crosshair is on.
+- `RoundedBoxGeometry` and rounded lathe shapes, and procedural 3D clay-miniature desserts (`src/dessert3d.js`) with unbaked, plain, toasty and decorated variants.
+- Flat canvas textures with world-space UVs, a shared hand-lettered label atlas, additive glow sprites, dust motes, and a painted hillside seen through real window openings.
+- Static meshes are merged by material (a few hundred draw calls). The pixel ratio drops automatically on slow devices.
+- The title screen is the original isometric cutaway diorama, and the camera swoops into the baker's eyes.
 
 ## Files
 
-- `index.html` – page, HUD, recipe book and styles
-- `src/main.js` – game loop, input, cameras, customers and stations
-- `src/world.js` – the room, stations with faces and decor
-- `src/characters.js` – chibi animals
-- `src/desserts.js` – the 50-dessert menu and sticker painter
-- `src/toon.js` – toon materials, outlines, geometry helpers
-- `src/fx.js`, `src/audio.js` – particles and synthesized sound effects
+- `index.html`: page, HUD, tickets, mini-game card, recipe book and styles
+- `src/main.js`: game loop, first-person camera, targeting, orders, stations, mini-games, customers
+- `src/world.js`: the room, stations, island, Dry and Cold Storage, café, lighting
+- `src/props.js`: reusable furniture and flat textures
+- `src/desserts.js`: the 50 desserts, recipe cards, toppings and sticker art
+- `src/ingredients.js`: 33 ingredients with stickers, 3D models and the label atlas
+- `src/dessert3d.js`: procedural 3D desserts and mixing bowls
+- `src/characters.js`: chibi animals
+- `src/viewmodel.js`: first-person paws
+- `src/input.js`: keyboard, pointer lock, drag look and touch
+- `src/ui.js`: DOM for tickets, bubbles, mini-games and the book
+- `src/toon.js`, `src/merge.js`, `src/sticker.js`: toon materials, outlines, batching, 2D sticker helpers
+- `src/fx.js`, `src/audio.js`: particles and synthesized sound effects

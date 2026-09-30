@@ -2,6 +2,7 @@
 // rounded geometry helpers, additive glow sprites and flat canvas textures.
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
+import { mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 
 export const INK = '#4B2E1D';
 
@@ -14,6 +15,7 @@ export const C = {
   honey: '#D9A05B',
   honeyLight: '#E8BC7A',
   honeyDark: '#B97A43',
+  butcher: '#E6B67A',
   butter: '#FFE08A',
   pink: '#F7B9C4',
   pinkDeep: '#EE93A6',
@@ -30,12 +32,15 @@ export const C = {
   breadDark: '#C98240',
 };
 
+let maxAniso = 4;
+export function setMaxAnisotropy(n) { maxAniso = Math.max(1, Math.min(16, n)); }
+
 // ---------------------------------------------------------------- materials
 
 // 4 hard light steps. The darkest step stays fairly bright so shade is warm
 // and gentle instead of muddy.
 const gradientMap = (() => {
-  const data = new Uint8Array([120, 170, 215, 255]);
+  const data = new Uint8Array([128, 176, 218, 255]);
   const t = new THREE.DataTexture(data, 4, 1, THREE.RedFormat);
   t.minFilter = THREE.NearestFilter;
   t.magFilter = THREE.NearestFilter;
@@ -46,7 +51,7 @@ const gradientMap = (() => {
 
 const matCache = new Map();
 export function toon(color, opts = {}) {
-  const key = `${color}|${opts.emissive || ''}|${opts.emissiveIntensity ?? ''}`;
+  const key = `${color}|${opts.emissive || ''}|${opts.emissiveIntensity ?? ''}|${opts.transparent ? opts.opacity : ''}`;
   if (!opts.map && !opts.unique && matCache.has(key)) return matCache.get(key);
   const m = new THREE.MeshToonMaterial({
     color: opts.map ? '#ffffff' : color,
@@ -56,6 +61,7 @@ export function toon(color, opts = {}) {
     emissiveIntensity: opts.emissiveIntensity ?? 1,
     transparent: !!opts.transparent,
     opacity: opts.opacity ?? 1,
+    depthWrite: opts.transparent ? false : true,
   });
   if (!opts.map && !opts.unique) matCache.set(key, m);
   return m;
@@ -63,20 +69,26 @@ export function toon(color, opts = {}) {
 
 // ---------------------------------------------------------------- outlines
 
-export const outlineUniforms = { resolution: { value: new THREE.Vector2(1, 1) } };
+export const outlineUniforms = {
+  resolution: { value: new THREE.Vector2(1, 1) },
+  // lines keep full weight up to this view depth, then thin out (perspective only)
+  distRef: { value: 1e6 },
+};
 
 const outlineVert = /* glsl */ `
   uniform vec2 resolution;
   uniform float thickness;
+  uniform float distRef;
   void main() {
     vec4 clip = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
     vec3 n = normalize(normalMatrix * normal);
     vec4 clipN = projectionMatrix * vec4(n, 0.0);
-    // work in pixel space so the line is the same width everywhere
     vec2 dir = clipN.xy * resolution;
     float len = length(dir);
     dir = len > 1e-5 ? dir / len : vec2(0.0);
-    clip.xy += dir * thickness * 2.0 / resolution * clip.w;
+    float w = max(clip.w, 1e-3);
+    float px = thickness * clamp(distRef / w, 0.42, 1.0);
+    clip.xy += dir * px * 2.0 / resolution * clip.w;
     gl_Position = clip;
   }
 `;
@@ -88,12 +100,13 @@ const outlineFrag = /* glsl */ `
   }
 `;
 
-function outlineMaterial(px) {
+function outlineMaterial(px, color = INK) {
   return new THREE.ShaderMaterial({
     uniforms: {
       resolution: outlineUniforms.resolution,
+      distRef: outlineUniforms.distRef,
       thickness: { value: px },
-      color: { value: new THREE.Color(INK) },
+      color: { value: new THREE.Color(color) },
     },
     vertexShader: outlineVert,
     fragmentShader: outlineFrag,
@@ -101,16 +114,34 @@ function outlineMaterial(px) {
   });
 }
 
+const BASE = { thick: 3.0, mid: 2.2, thin: 1.4, hl: 7.0 };
 export const OUT = {
-  thick: outlineMaterial(3.0),
-  mid: outlineMaterial(2.1),
-  thin: outlineMaterial(1.3),
+  thick: outlineMaterial(BASE.thick),
+  mid: outlineMaterial(BASE.mid),
+  thin: outlineMaterial(BASE.thin),
+  // warm glow line drawn around whatever the crosshair is on
+  hl: outlineMaterial(BASE.hl, '#FFD27A'),
 };
 
 export function setOutlineScale(s) {
-  OUT.thick.uniforms.thickness.value = 3.0 * s;
-  OUT.mid.uniforms.thickness.value = 2.1 * s;
-  OUT.thin.uniforms.thickness.value = 1.3 * s;
+  for (const k in BASE) OUT[k].uniforms.thickness.value = BASE[k] * s;
+}
+
+/**
+ * Hull geometry with averaged normals, so the ink line has no gaps at hard
+ * edges (cylinder caps, extrusions, box corners).
+ */
+const hullCache = new WeakMap();
+export function hullGeo(geo) {
+  let h = hullCache.get(geo);
+  if (h) return h;
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', geo.attributes.position.clone());
+  if (geo.index) g.setIndex(geo.index.clone());
+  h = mergeVertices(g, 1e-4);
+  h.computeVertexNormals();
+  hullCache.set(geo, h);
+  return h;
 }
 
 /** Toon mesh with an ink hull child. */
@@ -121,7 +152,7 @@ export function mk(geo, color, o = {}) {
   m.receiveShadow = o.receive ?? true;
   const ol = o.outline === undefined ? 'thick' : o.outline;
   if (ol) {
-    const h = new THREE.Mesh(geo, OUT[ol]);
+    const h = new THREE.Mesh(hullGeo(geo), OUT[ol]);
     h.castShadow = false;
     h.receiveShadow = false;
     h.userData.outline = true;
@@ -164,16 +195,43 @@ function roundedProfile(rt, rb, h, bevel, steps = 4) {
 export const G = {
   box: (w, h, d, r = 0.08) =>
     cached(`box${w},${h},${d},${r}`, () =>
-      new RoundedBoxGeometry(w, h, d, 3, Math.max(0.005, Math.min(r, w / 2 - 0.004, h / 2 - 0.004, d / 2 - 0.004)))),
+      new RoundedBoxGeometry(w, h, d, 3, Math.max(0.004, Math.min(r, w / 2 - 0.003, h / 2 - 0.003, d / 2 - 0.003)))),
   sphere: (r, ws = 24, hs = 16) => cached(`sph${r},${ws},${hs}`, () => new THREE.SphereGeometry(r, ws, hs)),
   capsule: (r, l) => cached(`cap${r},${l}`, () => new THREE.CapsuleGeometry(r, l, 6, 16)),
   cyl: (rt, rb, h, bevel = 0.04, seg = 28) =>
     cached(`cyl${rt},${rb},${h},${bevel},${seg}`, () => new THREE.LatheGeometry(roundedProfile(rt, rb, h, bevel), seg)),
-  torus: (r, t, arc = Math.PI * 2) =>
-    cached(`tor${r},${t},${arc}`, () => new THREE.TorusGeometry(r, t, 8, 24, arc)),
+  lathe: (pts, seg = 24) =>
+    cached(`lat${seg}|${pts.map((p) => `${p.x.toFixed(4)},${p.y.toFixed(4)}`).join(';')}`, () => new THREE.LatheGeometry(pts, seg)),
+  torus: (r, t, arc = Math.PI * 2, seg = 24) =>
+    cached(`tor${r},${t},${arc},${seg}`, () => new THREE.TorusGeometry(r, t, 8, seg, arc)),
   circle: (r) => cached(`cir${r}`, () => new THREE.CircleGeometry(r, 24)),
   plane: (w, h) => cached(`pl${w},${h}`, () => new THREE.PlaneGeometry(w, h)),
 };
+
+/**
+ * Re-maps a mesh's UVs from its world position so tiled textures keep the same
+ * scale on every wall segment. plane: 'zy' (walls along z), 'xy', or 'xz' (floors).
+ */
+export function worldUV(mesh, plane, tile, offset = [0, 0]) {
+  const [tu, tv] = Array.isArray(tile) ? tile : [tile, tile];
+  mesh.updateMatrixWorld(true);
+  const geo = mesh.geometry.clone();
+  const pos = geo.attributes.position;
+  const uv = geo.attributes.uv;
+  const v = new THREE.Vector3();
+  for (let i = 0; i < pos.count; i++) {
+    v.fromBufferAttribute(pos, i).applyMatrix4(mesh.matrixWorld);
+    let a, b;
+    if (plane === 'zy') { a = v.z; b = v.y; }
+    else if (plane === 'xy') { a = v.x; b = v.y; }
+    else { a = v.x; b = -v.z; }
+    uv.setXY(i, a / tu + offset[0], b / tv + offset[1]);
+  }
+  uv.needsUpdate = true;
+  mesh.geometry = geo;
+  for (const c of mesh.children) if (c.userData.outline) c.geometry = hullGeo(geo);
+  return mesh;
+}
 
 // ---------------------------------------------------------------- faces
 
@@ -194,7 +252,7 @@ export function addFace(parent, s = 1, o = {}) {
     hl.position.set(-0.018 * s, 0.022 * s, 0.03 * s);
     e.add(hl);
     eyes.push(e);
-    const blush = new THREE.Mesh(G.circle(0.07 * s), toon(C.pinkDeep, { transparent: true, opacity: 0.85 }));
+    const blush = new THREE.Mesh(G.circle(0.07 * s), toon(C.pinkDeep));
     blush.position.set(sx * 0.3 * s, -0.07 * s, 0.005);
     blush.scale.set(1, 0.65, 1);
     face.add(blush);
@@ -223,7 +281,7 @@ export function canvasTex(w, h, draw, repeat) {
   draw(ctx, w, h);
   const t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace;
-  t.anisotropy = 4;
+  t.anisotropy = maxAniso;
   if (repeat) {
     t.wrapS = t.wrapT = THREE.RepeatWrapping;
     t.repeat.set(repeat[0], repeat[1]);
@@ -231,20 +289,26 @@ export function canvasTex(w, h, draw, repeat) {
   return t;
 }
 
-const GLOW_TEX = canvasTex(128, 128, (ctx) => {
-  const g = ctx.createRadialGradient(64, 64, 0, 64, 64, 64);
-  g.addColorStop(0, 'rgba(255,255,255,1)');
-  g.addColorStop(0.25, 'rgba(255,255,255,0.55)');
-  g.addColorStop(0.6, 'rgba(255,255,255,0.14)');
-  g.addColorStop(1, 'rgba(255,255,255,0)');
-  ctx.fillStyle = g;
-  ctx.fillRect(0, 0, 128, 128);
-});
+let GLOW_TEX = null;
+function glowTex() {
+  if (!GLOW_TEX) {
+    GLOW_TEX = canvasTex(128, 128, (ctx) => {
+      const g = ctx.createRadialGradient(64, 64, 0, 64, 64, 64);
+      g.addColorStop(0, 'rgba(255,255,255,1)');
+      g.addColorStop(0.25, 'rgba(255,255,255,0.55)');
+      g.addColorStop(0.6, 'rgba(255,255,255,0.14)');
+      g.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, 128, 128);
+    });
+  }
+  return GLOW_TEX;
+}
 
 export function glow(color, size, opacity = 0.55) {
   const s = new THREE.Sprite(
     new THREE.SpriteMaterial({
-      map: GLOW_TEX,
+      map: glowTex(),
       color,
       blending: THREE.AdditiveBlending,
       transparent: true,
@@ -258,20 +322,22 @@ export function glow(color, size, opacity = 0.55) {
   return s;
 }
 
-/** Soft faint ambient-occlusion blob placed flat on the floor. */
-const BLOB_TEX = canvasTex(64, 64, (ctx) => {
-  const g = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
-  g.addColorStop(0, 'rgba(120,70,40,0.5)');
-  g.addColorStop(0.6, 'rgba(120,70,40,0.22)');
-  g.addColorStop(1, 'rgba(120,70,40,0)');
-  ctx.fillStyle = g;
-  ctx.fillRect(0, 0, 64, 64);
-});
+/** Soft faint ambient-occlusion blob placed flat on the floor (shared material, merges into one draw). */
+let BLOB_MAT = null;
 export function blob(w, d = w) {
-  const m = new THREE.Mesh(
-    G.plane(1, 1),
-    new THREE.MeshBasicMaterial({ map: BLOB_TEX, transparent: true, depthWrite: false }),
-  );
+  if (!BLOB_MAT) {
+    const tex = canvasTex(64, 64, (ctx) => {
+      const g = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
+      g.addColorStop(0, 'rgba(120,70,40,0.5)');
+      g.addColorStop(0.6, 'rgba(120,70,40,0.22)');
+      g.addColorStop(1, 'rgba(120,70,40,0)');
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, 64, 64);
+    });
+    BLOB_MAT = new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false });
+    BLOB_MAT.userData.mergeable = true;
+  }
+  const m = new THREE.Mesh(G.plane(1, 1), BLOB_MAT);
   m.rotation.x = -Math.PI / 2;
   m.scale.set(w, d, 1);
   m.position.y = 0.012;
