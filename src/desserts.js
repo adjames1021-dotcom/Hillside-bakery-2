@@ -19,12 +19,12 @@ export const STATIONS = {
 export const STEP_STATION = { gather: 'storage', mix: 'mix', prep: 'prep', bake: 'bake', cook: 'cook', chill: 'chill', decor: 'decor' };
 
 export const CATEGORIES = [
-  { id: 'pies', name: 'Pies & Cobblers', color: '#F4A646', unlock: 0 },
-  { id: 'cookies', name: 'Cookies & Bars', color: '#E8BC7A', unlock: 0 },
-  { id: 'pastries', name: 'Pastries & Fried Treats', color: '#F7B9C4', unlock: 3 },
-  { id: 'cakes', name: 'Cakes', color: '#EE93A6', unlock: 6 },
-  { id: 'cold', name: 'Cold & Frozen', color: '#AFD6EC', unlock: 10 },
-  { id: 'candy', name: 'Candy & Campfire', color: '#AFCB9C', unlock: 14 },
+  { id: 'pies', name: 'Pies & Cobblers', color: '#F4A646', day: 1 },
+  { id: 'cookies', name: 'Cookies & Bars', color: '#E8BC7A', day: 1 },
+  { id: 'pastries', name: 'Pastries & Fried Treats', color: '#F7B9C4', day: 2 },
+  { id: 'cakes', name: 'Cakes', color: '#EE93A6', day: 3 },
+  { id: 'cold', name: 'Cold & Frozen', color: '#AFD6EC', day: 4 },
+  { id: 'candy', name: 'Candy & Campfire', color: '#AFCB9C', day: 5 },
 ];
 
 // ------------------------------------------------------------------ helpers
@@ -891,68 +891,91 @@ export function toppingURL(t) {
 
 const gather = (...items) => ({ t: 'gather', items });
 const mix = (label = 'Mix the batter') => ({ t: 'mix', label });
-const prep = (label, mode = 'tap', n = 6) => ({ t: 'prep', label, mode, n });
+const prep = (label, mode = 'tap', n = 6, seq = null) => ({ t: 'prep', label, mode, n, seq });
+const order = (label, seq) => ({ t: 'prep', label, mode: 'order', n: seq.length, seq });
 const bake = (label = 'Bake until golden', dur = 10) => ({ t: 'bake', label, dur });
 const cook = (label = 'Cook on the stove', dur = 9) => ({ t: 'cook', label, dur });
 const chill = (label = 'Chill in the freezer', dur = 7) => ({ t: 'chill', label, dur });
 const decor = (...tops) => ({ t: 'decor', tops });
 
+// Ingredients that need prepping at the island before they can be used.
+// Staples (flour, sugar, butter, milk...) go straight in, so every recipe's
+// prep is shaped by the ingredients that make it special. A "!" after an
+// ingredient in a recipe means "use it whole" (e.g. a caramel apple).
+export const ING_PREP = {
+  eggs: { label: 'Crack the eggs', mode: 'hit', n: 2 },
+  apples: { label: 'Peel the apples', mode: 'swirl', n: 2 },
+  peaches: { label: 'Slice the peaches', mode: 'tap', n: 5 },
+  bananas: { label: 'Peel the bananas', mode: 'zigzag', n: 4 },
+  strawberries: { label: 'Hull the strawberries', mode: 'tap', n: 5 },
+  pineapple: { label: 'Core the pineapple rings', mode: 'swirl', n: 1 },
+  cherries: { label: 'Pit the cherries', mode: 'hit', n: 3 },
+  carrots: { label: 'Grate the carrots', mode: 'roll', n: 1 },
+  'sweet-potato': { label: 'Mash the sweet potatoes', mode: 'tap', n: 8 },
+  pumpkin: { label: 'Scoop & mash the pumpkin', mode: 'tap', n: 8 },
+  lemons: { label: 'Zest the lemons', mode: 'roll', n: 1 },
+  limes: { label: 'Squeeze the limes', mode: 'hold', n: 1 },
+  chocolate: { label: 'Chop the chocolate', mode: 'tap', n: 5 },
+  nuts: { label: 'Chop the pecans', mode: 'tap', n: 5 },
+  bread: { label: 'Cube the bread', mode: 'tap', n: 5 },
+};
+
 const RECIPES = {
-  'apple-pie': [gather('flour', 'butter', 'apples', 'cinnamon'), mix('Knead the dough'), prep('Roll & fill the crust', 'roll'), bake()],
-  'pecan-pie': [gather('flour', 'butter'), mix('Knead the dough'), prep('Roll the crust', 'roll'), gather('nuts', 'caramel', 'eggs'), prep('Arrange the pecans', 'tap', 6), bake()],
-  'key-lime-pie': [gather('graham', 'butter'), prep('Press the crust', 'tap', 5), gather('limes', 'milk', 'eggs'), mix('Whisk the lime filling'), chill('Chill until set'), decor('whipped')],
-  'pumpkin-pie': [gather('flour', 'butter', 'pumpkin', 'cinnamon'), mix('Blend the filling'), prep('Roll & fill the crust', 'roll'), bake(), decor('whipped')],
-  'cherry-pie': [gather('flour', 'butter', 'cherries', 'sugar'), mix('Knead the dough'), prep('Weave the lattice', 'tap', 6), bake()],
-  'banana-cream-pie': [gather('flour', 'butter', 'bananas', 'milk'), mix('Stir the custard'), prep('Roll the crust & layer bananas', 'roll'), bake(), decor('whipped', 'shavings')],
-  'blueberry-pie': [gather('flour', 'butter', 'blueberries', 'sugar'), mix('Knead the dough'), prep('Weave the lattice', 'tap', 6), bake()],
-  'sweet-potato-pie': [gather('flour', 'butter', 'sweet-potato', 'cinnamon'), mix('Mash & blend'), prep('Roll & fill the crust', 'roll'), bake()],
-  'mud-pie': [gather('chocolate', 'butter', 'eggs', 'cream'), mix('Whisk the fudge filling'), prep('Press the cookie crust', 'tap', 5), bake(), chill('Chill until set'), decor('whipped', 'shavings')],
-  'peach-cobbler': [gather('peaches', 'sugar', 'flour', 'butter'), prep('Slice the peaches', 'tap', 6), mix('Crumble the biscuit topping'), bake()],
-  'apple-crisp': [gather('apples', 'oats', 'sugar', 'butter'), prep('Slice the apples', 'tap', 6), mix('Crumble the oat topping'), bake()],
+  'apple-pie': [gather('flour', 'butter', 'apples', 'cinnamon'), mix('Knead the dough'), prep('Roll out the crust', 'roll'), prep('Weave the lattice', 'alternate', 8), bake()],
+  'pecan-pie': [gather('flour', 'butter'), mix('Knead the dough'), prep('Roll out the crust', 'roll'), prep('Crimp the edges', 'hit', 5), gather('nuts', 'caramel', 'eggs'), prep('Pour in the filling', 'fill'), bake('Bake until set')],
+  'key-lime-pie': [gather('graham', 'butter'), prep('Press the crumb crust', 'tap', 6), gather('limes', 'milk', 'eggs'), mix('Whisk the lime filling'), prep('Pour into the crust', 'fill'), chill('Chill until set'), decor('whipped')],
+  'pumpkin-pie': [gather('flour', 'butter', 'pumpkin', 'cinnamon'), mix('Blend the spiced filling'), prep('Roll out the crust', 'roll'), prep('Crimp the edges', 'hit', 5), bake(), decor('whipped')],
+  'cherry-pie': [gather('flour', 'butter', 'cherries', 'sugar'), mix('Knead the dough'), cook('Simmer the cherries'), prep('Roll out the crust', 'roll'), prep('Weave the lattice', 'alternate', 8), bake()],
+  'banana-cream-pie': [gather('flour', 'butter'), mix('Knead the dough'), prep('Roll out the crust', 'roll'), bake('Blind-bake the crust', 8), gather('bananas', 'milk', 'eggs'), cook('Stir the custard'), order('Layer the pie', ['Bananas', 'Custard', 'Bananas']), decor('whipped', 'shavings')],
+  'blueberry-pie': [gather('flour', 'butter', 'blueberries', 'sugar'), mix('Knead the dough'), prep('Roll out the crust', 'roll'), prep('Cut star vents', 'hit', 5), bake()],
+  'sweet-potato-pie': [gather('flour', 'butter', 'sweet-potato', 'cinnamon'), mix('Whip the filling'), prep('Pour into the crust', 'fill'), bake('Bake until set')],
+  'mud-pie': [gather('chocolate', 'butter', 'eggs', 'cream'), cook('Melt the chocolate'), mix('Whisk the fudge filling'), prep('Press the cookie crust', 'tap', 6), bake(), chill('Chill until set'), decor('whipped', 'shavings')],
+  'peach-cobbler': [gather('peaches', 'sugar', 'flour', 'butter'), cook('Simmer the peaches'), mix('Crumble the biscuit dough'), prep('Drop biscuit spoonfuls', 'hit', 6), bake()],
+  'apple-crisp': [gather('apples', 'oats', 'sugar', 'butter'), mix('Rub the oat crumble'), prep('Scatter the topping', 'zigzag', 6), bake()],
 
-  'cheesecake': [gather('graham', 'butter'), prep('Press the crust', 'tap', 5), gather('cream-cheese', 'eggs', 'sugar'), mix('Beat until silky'), bake('Bake gently'), chill('Chill until firm'), decor('strawberry')],
-  'cupcake': [gather('flour', 'butter', 'eggs', 'sugar'), mix('Whisk the batter'), prep('Fill the liners', 'tap', 6), bake(), decor('frosting', 'sprinkles', 'cherry')],
-  'red-velvet': [gather('flour', 'chocolate', 'eggs', 'cream-cheese'), mix('Whisk the red batter'), bake(), chill('Cool the layers'), decor('frosting')],
-  'boston-cream': [gather('flour', 'eggs', 'milk', 'sugar'), mix('Whisk the sponge'), bake(), prep('Fill with custard', 'tap', 4), decor('fudge')],
-  'carrot-cake': [gather('flour', 'carrots', 'eggs', 'cream-cheese'), prep('Grate the carrots', 'wiggle'), mix('Fold the batter'), bake(), decor('frosting', 'nuts')],
-  'devils-food': [gather('flour', 'chocolate', 'eggs', 'sugar'), mix('Whisk the batter'), bake(), prep('Stack the layers', 'tap', 3), decor('fudge')],
-  'pineapple-upside-down': [gather('flour', 'eggs', 'butter', 'sugar'), mix('Whisk the batter'), gather('pineapple', 'cherries'), prep('Arrange the rings', 'tap', 5), bake()],
-  'german-chocolate': [gather('flour', 'chocolate', 'eggs', 'butter'), mix('Whisk the batter'), bake(), gather('coconut', 'nuts'), prep('Spread the coconut-pecan filling', 'wiggle')],
-  'angel-food': [gather('flour', 'eggs', 'sugar'), mix('Whip the egg whites'), bake(), chill('Cool upside down'), decor('powdered')],
-  'pound-cake': [gather('flour', 'butter', 'sugar', 'eggs'), mix('Cream the batter'), prep('Pour into the loaf pan', 'hold'), bake(), decor('glaze')],
-  'strawberry-shortcake': [gather('flour', 'butter', 'strawberries', 'sugar'), mix('Mix the biscuit dough'), bake(), prep('Split & layer the berries', 'tap', 4), decor('whipped')],
-  'whoopie-pies': [gather('flour', 'chocolate', 'butter', 'marshmallows'), mix('Whisk the batter'), prep('Scoop the rounds', 'tap', 6), bake(), prep('Sandwich the filling', 'tap', 3)],
+  'cheesecake': [gather('graham', 'butter'), prep('Press the crumb crust', 'tap', 6), gather('cream-cheese', 'eggs', 'sugar'), mix('Beat until silky'), prep('Smooth the top', 'swirl', 2), bake('Bake gently'), chill('Chill until firm'), decor('strawberry')],
+  'cupcake': [gather('flour', 'butter', 'eggs', 'sugar'), mix('Whisk the batter'), prep('Fill the liners', 'fill'), bake(), prep('Pipe the buttercream swirl', 'swirl', 3), decor('sprinkles', 'cherry')],
+  'red-velvet': [gather('flour', 'chocolate', 'eggs', 'cream-cheese'), mix('Whisk the red batter'), prep('Pour the layers', 'fill'), bake(), chill('Cool the layers'), order('Stack the cake', ['Red layer', 'Frosting', 'Red layer']), decor('frosting')],
+  'boston-cream': [gather('flour', 'eggs', 'milk', 'sugar'), mix('Whisk the sponge'), bake(), cook('Stir the custard'), order('Layer the cake', ['Sponge', 'Custard', 'Sponge']), decor('fudge')],
+  'carrot-cake': [gather('flour', 'carrots', 'eggs', 'cream-cheese'), mix('Fold the spiced batter'), bake(), prep('Spread the frosting', 'swirl', 2), decor('nuts')],
+  'devils-food': [gather('flour', 'chocolate', 'eggs', 'sugar'), cook('Bloom the cocoa'), mix('Whisk the batter'), bake(), order('Stack the layers', ['Chocolate layer', 'Fudge', 'Chocolate layer', 'Fudge']), decor('shavings')],
+  'pineapple-upside-down': [gather('flour', 'eggs', 'butter', 'sugar'), mix('Whisk the batter'), gather('pineapple', 'cherries'), cook('Caramelize the brown sugar'), prep('Arrange the rings', 'hit', 5), bake(), prep('Flip it over', 'hit', 1)],
+  'german-chocolate': [gather('flour', 'chocolate', 'eggs', 'butter'), mix('Whisk the batter'), bake(), gather('coconut', 'nuts'), cook('Cook the coconut-pecan filling'), prep('Spread the filling', 'swirl', 2)],
+  'angel-food': [gather('flour', 'eggs', 'sugar'), mix('Whip to stiff peaks'), prep('Fold in gently', 'zigzag', 6), bake(), chill('Cool upside down'), decor('powdered')],
+  'pound-cake': [gather('flour', 'butter', 'sugar', 'eggs'), mix('Cream the batter'), prep('Pour into the loaf pan', 'fill'), bake(), prep('Drizzle the glaze', 'zigzag', 6)],
+  'strawberry-shortcake': [gather('flour', 'butter', 'strawberries', 'sugar'), mix('Mix the biscuit dough'), prep('Cut the biscuits', 'hit', 4), bake(), order('Layer the shortcake', ['Biscuit', 'Strawberries', 'Biscuit']), decor('whipped', 'strawberry')],
+  'whoopie-pies': [gather('flour', 'chocolate', 'butter', 'marshmallows'), mix('Whisk the batter'), prep('Scoop the rounds', 'hit', 6), bake(), prep('Pipe the filling', 'swirl', 2), prep('Sandwich them', 'tap', 3)],
 
-  'chocolate-chip': [gather('flour', 'butter', 'sugar', 'chocolate'), mix('Cream the dough'), prep('Scoop cookie balls', 'tap', 6), bake()],
-  'brownies': [gather('chocolate', 'butter', 'eggs', 'sugar'), mix('Whisk the batter'), prep('Pour into the pan', 'hold'), bake(), prep('Cut into squares', 'tap', 4)],
-  'snickerdoodles': [gather('flour', 'butter', 'sugar', 'cinnamon'), mix('Cream the dough'), prep('Roll in cinnamon sugar', 'tap', 6), bake()],
-  'lemon-bars': [gather('flour', 'butter', 'lemons', 'eggs'), mix('Whisk the lemon curd'), prep('Layer on the shortbread', 'tap', 4), bake(), decor('powdered')],
-  'rice-krispies': [gather('butter', 'marshmallows', 'crispy-rice'), cook('Melt the marshmallows'), prep('Press into the pan', 'tap', 5), chill('Let it set')],
-  'oatmeal-raisin': [gather('oats', 'raisins', 'flour', 'butter'), mix('Stir the dough'), prep('Scoop cookie balls', 'tap', 6), bake()],
-  'peanut-butter': [gather('peanut-butter', 'flour', 'sugar', 'eggs'), mix('Cream the dough'), prep('Press the fork crisscross', 'tap', 6), bake()],
-  'sugar-cookies': [gather('flour', 'butter', 'sugar', 'eggs'), mix('Cream the dough'), prep('Roll & cut shapes', 'roll'), bake(), decor('pink', 'sprinkles')],
+  'chocolate-chip': [gather('flour', 'butter', 'sugar', 'chocolate'), mix('Cream the dough'), prep('Scoop even dough balls', 'hit', 6), bake()],
+  'brownies': [gather('chocolate', 'butter', 'eggs', 'sugar'), cook('Melt chocolate & butter'), mix('Whisk the batter'), prep('Swirl the top', 'swirl', 2), bake(), prep('Cut into squares', 'hit', 4)],
+  'snickerdoodles': [gather('flour', 'butter', 'sugar', 'cinnamon'), mix('Cream the dough'), prep('Roll in cinnamon sugar', 'swirl', 2), bake()],
+  'lemon-bars': [gather('flour', 'butter', 'lemons', 'eggs'), prep('Press the shortbread', 'tap', 6), bake('Bake the base', 8), cook('Stir the lemon curd'), prep('Pour on the curd', 'fill'), chill('Chill until set'), decor('powdered')],
+  'rice-krispies': [gather('butter', 'marshmallows', 'crispy-rice'), cook('Melt the marshmallows'), prep('Fold in the cereal', 'zigzag', 6), prep('Press into the pan', 'tap', 5), chill('Let it set'), prep('Cut into squares', 'hit', 4)],
+  'oatmeal-raisin': [gather('oats', 'raisins', 'flour', 'butter'), mix('Stir the dough'), prep('Scoop even dough balls', 'hit', 6), bake()],
+  'peanut-butter': [gather('peanut-butter', 'flour', 'sugar', 'eggs'), mix('Cream the dough'), prep('Press the fork crisscross', 'alternate', 6), bake()],
+  'sugar-cookies': [gather('flour', 'butter', 'sugar', 'eggs'), mix('Cream the dough'), prep('Roll out the dough', 'roll'), prep('Cut out shapes', 'hit', 5), bake(), decor('pink', 'sprinkles')],
 
-  'glazed-donuts': [gather('flour', 'milk', 'eggs', 'sugar'), mix('Knead the dough'), prep('Cut the donut rings', 'tap', 5), cook('Fry until golden'), decor('glaze', 'sprinkles')],
-  'cinnamon-rolls': [gather('flour', 'butter', 'cinnamon', 'sugar'), mix('Knead the dough'), prep('Roll & swirl', 'roll'), bake(), decor('frosting')],
-  'funnel-cake': [gather('flour', 'milk', 'eggs', 'sugar'), mix('Whisk the batter'), cook('Swirl into the hot oil'), decor('powdered')],
-  'apple-fritters': [gather('flour', 'apples', 'cinnamon', 'milk'), prep('Chop the apples', 'tap', 6), mix('Fold the batter'), cook('Fry until crisp'), decor('glaze')],
-  'blueberry-muffins': [gather('flour', 'blueberries', 'eggs', 'sugar'), mix('Fold in the berries'), prep('Fill the muffin cups', 'tap', 6), bake()],
-  'beignets': [gather('flour', 'milk', 'eggs', 'sugar'), mix('Knead the dough'), prep('Cut little squares', 'tap', 6), cook('Fry until puffy'), decor('powdered')],
-  'bread-pudding': [gather('bread', 'eggs', 'milk', 'sugar'), prep('Cube the bread', 'tap', 6), mix('Soak in custard'), bake(), decor('caramel')],
+  'glazed-donuts': [gather('flour', 'milk', 'eggs', 'sugar'), mix('Knead the dough'), prep('Cut the rings', 'hit', 5), cook('Fry & flip'), prep('Dip in the glaze', 'fill'), decor('sprinkles')],
+  'cinnamon-rolls': [gather('flour', 'butter', 'cinnamon', 'sugar'), mix('Knead the dough'), prep('Roll out the dough', 'roll'), prep('Roll up the swirl', 'swirl', 3), bake(), decor('frosting')],
+  'funnel-cake': [gather('flour', 'milk', 'eggs', 'sugar'), mix('Whisk the batter'), prep('Fill the funnel', 'fill'), cook('Swirl into the hot oil'), decor('powdered')],
+  'apple-fritters': [gather('flour', 'apples', 'cinnamon', 'milk'), mix('Fold the batter'), prep('Shape the fritters', 'hit', 4), cook('Fry & flip'), prep('Drizzle the glaze', 'zigzag', 6)],
+  'blueberry-muffins': [gather('flour', 'blueberries', 'eggs', 'sugar'), mix('Fold in the berries gently'), prep('Fill the muffin cups', 'fill'), bake(), decor('powdered')],
+  'beignets': [gather('flour', 'milk', 'eggs', 'sugar'), mix('Knead the dough'), prep('Roll out the dough', 'roll'), prep('Cut little squares', 'hit', 6), cook('Fry until puffy'), decor('powdered')],
+  'bread-pudding': [gather('bread', 'eggs', 'milk', 'sugar'), mix('Soak in custard'), prep('Pour into the dish', 'fill'), bake(), prep('Drizzle the caramel', 'zigzag', 6)],
 
-  'sundae': [gather('ice-cream'), prep('Scoop the ice cream', 'wiggle'), decor('fudge', 'whipped', 'cherry')],
-  'milkshake': [gather('ice-cream', 'milk'), mix('Blend until thick'), chill('Frost the glass'), decor('whipped', 'cherry')],
-  'banana-pudding': [gather('bananas', 'milk', 'eggs', 'sugar'), cook('Stir the custard'), prep('Layer wafers & bananas', 'tap', 5), chill('Chill until set'), decor('whipped')],
-  'banana-split': [gather('bananas', 'ice-cream'), prep('Split & scoop', 'tap', 5), decor('fudge', 'nuts', 'cherry')],
-  'root-beer-float': [gather('root-beer', 'ice-cream'), chill('Frost the mug'), prep('Pour & float a scoop', 'hold')],
-  'baked-alaska': [gather('ice-cream', 'flour', 'eggs', 'sugar'), mix('Whip the meringue'), chill('Freeze the dome'), bake('Toast the meringue', 7)],
-  'ice-cream-sandwich': [gather('flour', 'chocolate', 'butter'), mix('Mix the wafer dough'), bake(), gather('ice-cream'), prep('Sandwich & press', 'tap', 3), chill('Freeze until firm')],
+  'sundae': [gather('ice-cream', 'chocolate'), cook('Warm the hot fudge'), prep('Scoop three scoops', 'fill'), decor('fudge', 'whipped', 'cherry')],
+  'milkshake': [gather('ice-cream', 'milk'), chill('Frost the glass'), mix('Blend until thick'), prep('Pour into the glass', 'fill'), decor('whipped', 'cherry')],
+  'banana-pudding': [gather('bananas', 'milk', 'eggs', 'sugar'), cook('Stir the custard'), order('Layer the pudding', ['Wafers', 'Bananas', 'Custard', 'Wafers', 'Bananas', 'Custard']), chill('Chill until set'), decor('whipped')],
+  'banana-split': [gather('bananas', 'ice-cream'), prep('Split the banana', 'hit', 1), prep('Scoop three flavors', 'fill'), decor('fudge', 'nuts', 'cherry')],
+  'root-beer-float': [gather('root-beer', 'ice-cream'), chill('Frost the mug'), prep('Pour slowly, no spills!', 'fill'), prep('Float a scoop on top', 'hit', 1)],
+  'baked-alaska': [gather('ice-cream', 'flour', 'eggs', 'sugar'), prep('Dome the ice cream', 'swirl', 2), chill('Freeze the dome'), mix('Whip the meringue'), prep('Pipe meringue peaks', 'swirl', 3), bake('Toast the meringue', 6)],
+  'ice-cream-sandwich': [gather('flour', 'chocolate', 'butter'), mix('Mix the wafer dough'), prep('Roll out the wafers', 'roll'), bake(), gather('ice-cream'), prep('Sandwich & press', 'tap', 3), chill('Freeze until firm')],
 
-  'smores': [gather('graham', 'chocolate', 'marshmallows'), cook('Toast the marshmallow'), prep('Squish it together', 'tap', 3)],
-  'caramel-apple': [gather('apples', 'caramel'), cook('Melt the caramel'), prep('Dip & twirl', 'wiggle'), decor('nuts')],
-  'fudge': [gather('chocolate', 'sugar', 'butter', 'milk'), cook('Stir the fudge'), prep('Pour into the pan', 'hold'), chill('Let it set'), prep('Cut into squares', 'tap', 4)],
-  'pralines': [gather('nuts', 'sugar', 'butter', 'cream'), cook('Cook the caramel'), prep('Spoon onto wax paper', 'tap', 5)],
-  'cotton-candy': [gather('sugar'), cook('Melt the sugar'), prep('Spin the floss', 'wiggle')],
+  'smores': [gather('graham', 'chocolate!', 'marshmallows'), cook('Toast the marshmallow'), order('Stack it up', ['Graham', 'Chocolate', 'Marshmallow', 'Graham']), prep('Squish it together', 'tap', 3)],
+  'caramel-apple': [gather('apples!', 'caramel'), cook('Melt the caramel'), prep('Dip & twirl', 'fill'), decor('nuts'), chill('Let it set')],
+  'fudge': [gather('chocolate', 'sugar', 'butter', 'milk'), cook('Stir the fudge'), prep('Beat until glossy', 'wiggle'), prep('Pour into the pan', 'fill'), chill('Let it set'), prep('Cut into squares', 'hit', 4)],
+  'pralines': [gather('nuts', 'sugar', 'butter', 'cream'), cook('Cook the praline candy'), prep('Spoon onto wax paper', 'hit', 5)],
+  'cotton-candy': [gather('sugar'), cook('Melt the sugar'), prep('Spin the floss', 'swirl', 4)],
 };
 
 // batter/dough color shown in the bowl after mixing
@@ -965,6 +988,14 @@ const BATTER = {
   'carrot-cake': '#E39A5A', 'bread-pudding': '#F3D08A', 'cheesecake': '#FFF1D0', 'baked-alaska': '#FFF6E6',
 };
 
+// The Mixing Bowl plays differently depending on the verb on the card.
+function mixMode(label) {
+  if (/knead|crumble|rub/i.test(label)) return { mode: 'tap', n: 8, tapLabel: 'Knead!' };
+  if (/fold|stir|soak/i.test(label)) return { mode: 'zigzag', n: 5 };
+  if (/whip/i.test(label)) return { mode: 'swirl', n: 4 };
+  return { mode: 'swirl', n: 3 }; // whisk, beat, cream, blend
+}
+
 function stepLabel(s) {
   if (s.label) return s.label;
   if (s.t === 'gather') return 'Gather ingredients';
@@ -973,7 +1004,19 @@ function stepLabel(s) {
 }
 
 export const DESSERTS = D.map(([id, name, cat, desc, draw], i) => {
-  const steps = RECIPES[id].map((s) => ({ ...s, label: stepLabel(s), station: STEP_STATION[s.t] }));
+  const steps = RECIPES[id].map((raw) => {
+    const s = { ...raw };
+    if (s.t === 'gather') {
+      // "apples!" = use whole; everything else follows ING_PREP
+      s.whole = s.items.filter((x) => x.endsWith('!')).map((x) => x.slice(0, -1));
+      s.items = s.items.map((x) => x.replace('!', ''));
+      s.needsPrep = s.items.filter((x) => ING_PREP[x] && !s.whole.includes(x));
+    }
+    if (s.t === 'mix') Object.assign(s, mixMode(s.label || ''));
+    s.label = stepLabel(s);
+    s.station = STEP_STATION[s.t];
+    return s;
+  });
   const ingredients = [...new Set(steps.filter((s) => s.t === 'gather').flatMap((s) => s.items))];
   return { id, name, cat, desc, draw, n: i + 1, steps, ingredients, batter: BATTER[id] || CAT_BATTER[cat] };
 });

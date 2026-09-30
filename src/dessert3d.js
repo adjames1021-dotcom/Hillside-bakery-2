@@ -32,22 +32,132 @@ function waxPaper(g, w = 0.26, d = 0.2) {
   return add(g, part(G.box(w, 0.004, d, 0.002), '#FFFBF0', 'thin'), 0, 0.002, 0);
 }
 
-function swirlGeo(r, h) {
-  return geo(`sw${r},${h}`, () => {
-    const pts = [V(0.0005, 0)];
-    for (let i = 0; i < 3; i++) {
-      const t0 = i / 3, t1 = (i + 1) / 3;
-      const rr = r * (1 - t0 * 0.7);
-      pts.push(V(rr * 0.92, h * t0));
-      pts.push(V(rr, h * (t0 + 0.1)));
-      pts.push(V(rr * 0.72, h * (t1 - 0.03)));
+// A star-tip piped swirl: a ridged tube coiling up a cone and ending in a
+// little curled kiss, with a solid core so it reads as one dollop of frosting.
+function pipedGeo(r, h, turns = 2.3, ridges = 7) {
+  return geo(`pp${r},${h},${turns},${ridges}`, () => {
+    const segs = Math.round(48 * turns), ring = 16;
+    const pos = [], idx = [];
+    const smooth = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+    const center = (t) => {
+      const a = t * TAU * turns;
+      const rr = r * 0.6 * (1 - t) ** 0.9;
+      return new THREE.Vector3(Math.cos(a) * rr, h * (0.2 + t * 0.66) + (t > 0.9 ? (t - 0.9) * h * 1.2 : 0), Math.sin(a) * rr);
+    };
+    const tubeR = (t) => r * 0.42 * (1 - 0.72 * t) * (0.35 + 0.65 * smooth(0, 0.06, t)) * (1 - 0.92 * smooth(0.88, 1, t));
+    const up = new THREE.Vector3(0, 1, 0);
+    for (let i = 0; i <= segs; i++) {
+      const t = i / segs;
+      const c = center(t);
+      const T = center(Math.min(1, t + 0.002)).sub(center(Math.max(0, t - 0.002))).normalize();
+      const N = new THREE.Vector3().crossVectors(up, T).normalize();
+      const B = new THREE.Vector3().crossVectors(T, N).normalize();
+      const tr = tubeR(t);
+      for (let j = 0; j < ring; j++) {
+        const f = (j / ring) * TAU;
+        const rad = tr * (1 + 0.16 * Math.cos(ridges * f));
+        pos.push(c.x + (N.x * Math.cos(f) + B.x * Math.sin(f)) * rad, c.y + (N.y * Math.cos(f) + B.y * Math.sin(f)) * rad, c.z + (N.z * Math.cos(f) + B.z * Math.sin(f)) * rad);
+      }
     }
-    pts.push(V(r * 0.1, h * 0.97));
-    pts.push(V(0.0005, h));
-    return new THREE.LatheGeometry(pts, 16);
+    for (let i = 0; i < segs; i++) {
+      for (let j = 0; j < ring; j++) {
+        const a = i * ring + j, b2 = i * ring + ((j + 1) % ring), c2 = a + ring, d = b2 + ring;
+        idx.push(a, b2, c2, b2, d, c2);
+      }
+    }
+    const coil = new THREE.BufferGeometry();
+    coil.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    coil.setIndex(idx);
+    coil.computeVertexNormals();
+    return coil;
   });
 }
-const swirl = (g, r, h, col, x = 0, y = 0, z = 0) => add(g, part(swirlGeo(r, h), col, 'thin'), x, y, z);
+function coreGeo(r, h) {
+  return geo(`core${r},${h}`, () => new THREE.LatheGeometry([V(0.0005, 0), V(r * 0.78, 0), V(r * 0.8, h * 0.12), V(r * 0.45, h * 0.55), V(r * 0.12, h * 0.8), V(0.0005, h * 0.84)], 16));
+}
+function swirl(g, r, h, col, x = 0, y = 0, z = 0) {
+  const s = new THREE.Group();
+  s.position.set(x, y, z);
+  s.rotation.y = (x * 131 + z * 71) % TAU;
+  g.add(s);
+  add(s, part(coreGeo(r, h), col, false));
+  add(s, part(pipedGeo(r, h), col, 'thin'));
+  return s;
+}
+
+// Pie crust edge: a torus whose thickness waves in and out, like pinched dough.
+function crimpGeo(R, tube, n, amp = 0.28) {
+  return geo(`cr${R},${tube},${n},${amp}`, () => {
+    const g = new THREE.TorusGeometry(R, tube, 10, n * 8);
+    const p = g.attributes.position;
+    const v = new THREE.Vector3(), c = new THREE.Vector3();
+    for (let i = 0; i < p.count; i++) {
+      v.fromBufferAttribute(p, i);
+      const phi = Math.atan2(v.y, v.x);
+      c.set(Math.cos(phi) * R, Math.sin(phi) * R, 0);
+      const k = 1 + amp * Math.cos(n * phi);
+      v.sub(c).multiplyScalar(k).add(c);
+      p.setXYZ(i, v.x, v.y, v.z);
+    }
+    g.computeVertexNormals();
+    return g;
+  });
+}
+
+// Pleats for paper liners, fluted tins and pumpkins: pushes a lathe in and out around its axis.
+function fluted(base, n, amp, key) {
+  return geo(`fl${key},${n},${amp}`, () => {
+    const g = base.clone();
+    const p = g.attributes.position;
+    for (let i = 0; i < p.count; i++) {
+      const x = p.getX(i), z = p.getZ(i);
+      const k = 1 + amp * Math.cos(n * Math.atan2(z, x));
+      p.setX(i, x * k);
+      p.setZ(i, z * k);
+    }
+    g.computeVertexNormals();
+    return g;
+  });
+}
+
+// Hand-made cookie: a rounded disc with a gently irregular edge and domed middle.
+function cookieGeo(r, h, seed) {
+  return geo(`ck${r},${h},${seed}`, () => {
+    const g = G.cyl(r, r * 0.96, h, h * 0.45, 30).clone();
+    const p = g.attributes.position;
+    for (let i = 0; i < p.count; i++) {
+      const x = p.getX(i), z = p.getZ(i), y = p.getY(i);
+      const a = Math.atan2(z, x), d = Math.hypot(x, z) / r;
+      const k = 1 + 0.05 * Math.sin(5 * a + seed) + 0.035 * Math.sin(9 * a + seed * 2.3);
+      p.setX(i, x * k);
+      p.setZ(i, z * k);
+      if (y > 0) p.setY(i, y + (1 - d * d) * h * 0.35);
+    }
+    g.computeVertexNormals();
+    return g;
+  });
+}
+
+// Over-under pastry strips for a real woven lattice.
+function lattice(g, R, top, col, count = 4, w = 0.011) {
+  const gap = 0.05;
+  const offs = Array.from({ length: count }, (_, i) => (i - (count - 1) / 2) * gap);
+  const amp = 0.0045;
+  offs.forEach((off, i) => {
+    const len = Math.sqrt(Math.max(0, R * R - off * off));
+    for (const dir of [0, 1]) {
+      const pts = [];
+      for (let k = 0; k <= 24; k++) {
+        const u = -len + (2 * len * k) / 24;
+        const wave = amp * Math.cos((Math.PI * (u - offs[0])) / gap + i * Math.PI) * (dir ? -1 : 1);
+        pts.push(dir ? new THREE.Vector3(off, wave / 0.45, u) : new THREE.Vector3(u, wave / 0.45, off));
+      }
+      const tg = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 48, w, 8);
+      tg.scale(1, 0.45, 1);
+      add(g, part(tg, col, 'thin'), 0, top + 0.006, 0);
+    }
+  });
+}
 
 function cherry(g, x, y, z, r = 0.02) {
   add(g, part(G.sphere(r, 12, 10), '#E4605E', 'thin'), x, y + r * 0.9, z);
@@ -56,10 +166,19 @@ function cherry(g, x, y, z, r = 0.02) {
 }
 
 function berry(g, x, y, z, s = 1) {
-  const pts = [V(0.0005, 0), V(0.01, 0.004), V(0.02, 0.018), V(0.024, 0.03), V(0.021, 0.04), V(0.0005, 0.043)].map((p) => V(p.x * s, p.y * s));
-  const b = add(g, part(G.lathe(pts, 12), '#E4605E', 'thin'), x, y, z);
-  const cap = add(g, part(G.cyl(0.018 * s, 0.014 * s, 0.008 * s, 0.003, 8), C.sageDark, false), x, y + 0.043 * s, z);
-  b.rotation.x = cap.rotation.x = 0;
+  const pts = [V(0.0005, 0), V(0.006, 0.002), V(0.016, 0.012), V(0.023, 0.026), V(0.025, 0.035), V(0.02, 0.042), V(0.0005, 0.044)].map((p) => V(p.x * s, p.y * s));
+  add(g, part(G.lathe(pts, 18), '#E4605E', 'thin'), x, y, z);
+  // golden seeds and a star of leaves
+  for (let i = 0; i < 8; i++) {
+    const a = i * 2.4, t = [0.012, 0.022, 0.03, 0.017][i % 4], rr = [0.016, 0.023, 0.025, 0.02][i % 4] * s;
+    add(g, part(G.sphere(0.0022 * s, 5, 4), '#FFE08A', false), x + Math.cos(a) * rr, y + t * s, z + Math.sin(a) * rr);
+  }
+  for (let i = 0; i < 5; i++) {
+    const a = (i / 5) * TAU;
+    const l = add(g, part(G.sphere(0.009 * s, 8, 6), C.sageDark, false), x + Math.cos(a) * 0.009 * s, y + 0.044 * s, z + Math.sin(a) * 0.009 * s);
+    l.scale.set(1.5, 0.35, 0.65);
+    l.rotation.y = -a;
+  }
 }
 
 function sprinkles(g, rand, n, cx, cy, cz, rx, rz, yFn) {
@@ -136,24 +255,24 @@ const T = {};
 T.pie = (g, p, { P, bare, rand }) => {
   const crust = p.crust || '#E9A95A';
   plate(g, 0.19);
-  add(g, part(G.cyl(0.155, 0.125, 0.05, 0.016, 32), P(crust)), 0, 0.037, 0);
+  // fluted pie tin, pinched crust rim and a softly domed filling
+  add(g, part(fluted(G.cyl(0.155, 0.125, 0.05, 0.016, 72), 24, 0.028, 'pietin'), P(crust)), 0, 0.037, 0);
   const rimC = P(p.edge || crust);
-  const rim = add(g, part(G.torus(0.14, 0.019, TAU, 32), rimC), 0, 0.064, 0);
+  const rim = add(g, part(crimpGeo(0.138, 0.02, 18), rimC), 0, 0.066, 0);
   rim.rotation.x = Math.PI / 2;
-  for (let i = 0; i < 18; i++) {
-    const a = (i / 18) * TAU;
-    add(g, part(G.sphere(0.021, 8, 6), rimC, 'thin'), Math.cos(a) * 0.14, 0.068, Math.sin(a) * 0.14);
-  }
-  add(g, part(G.cyl(0.126, 0.126, 0.014, 0.005, 32), P(p.fill), false), 0, 0.06, 0);
+  const fillPts = [V(0.0005, 0.016), V(0.05, 0.015), V(0.1, 0.011), V(0.124, 0.006), V(0.128, 0), V(0.0005, 0)];
+  add(g, part(G.lathe(fillPts, 32), P(p.fill), false), 0, 0.054, 0);
   const top = 0.067;
-  if (p.bits) dotsOn(g, rand, 10, 0, top, 0, 0.1, 0.1, P(p.bits), 0.011);
-  if (p.lattice) {
-    for (const off of [-0.075, -0.025, 0.025, 0.075]) {
-      const len = 2 * Math.sqrt(0.132 * 0.132 - off * off);
-      add(g, part(G.box(len, 0.01, 0.022, 0.005), P(crust), 'thin'), 0, top + 0.004, off);
-      add(g, part(G.box(0.022, 0.01, len, 0.005), P(crust), 'thin'), off, top + 0.008, 0);
+  if (p.bits) {
+    for (let i = 0; i < 10; i++) {
+      const a = rand() * TAU, d = Math.sqrt(rand()) * 0.1;
+      const b = add(g, part(lumpyGeo(0.012, i + 11, 1), P(p.bits), false), Math.cos(a) * d, top - 0.001, Math.sin(a) * d);
+      b.scale.y = 0.6;
     }
-    if (p.sugar) dotsOn(g, rand, 30, 0, top + 0.014, 0, 0.11, 0.11, '#FFFBF0', 0.0035);
+  }
+  if (p.lattice) {
+    lattice(g, 0.132, top - 0.002, P(crust));
+    if (p.sugar) dotsOn(g, rand, 30, 0, top + 0.012, 0, 0.11, 0.11, '#FFFBF0', 0.0035);
   }
   if (p.ooze) for (const a of [0.6, 2.2, 4.1]) add(g, part(G.sphere(0.016, 8, 6), P(p.fill), 'thin'), Math.cos(a) * 0.15, 0.058, Math.sin(a) * 0.15);
   if (p.pecans) {
@@ -275,12 +394,12 @@ T.slice = (g, p, { P, bare, rand }) => {
 
 T.cupcake = (g, p, { P, bare, rand }) => {
   plate(g, 0.12);
-  add(g, part(G.cyl(0.07, 0.055, 0.075, 0.008, 24), stripeMat(p.liner || C.pink), 'mid'), 0, 0.05, 0);
-  const dome = add(g, part(G.sphere(0.074, 20, 12), P('#E4A55A'), 'mid'), 0, 0.088, 0);
-  dome.scale.y = 0.55;
+  add(g, part(fluted(G.cyl(0.07, 0.055, 0.075, 0.008, 72), 18, 0.035, 'liner'), stripeMat(p.liner || C.pink), 'mid'), 0, 0.05, 0);
+  const dome = add(g, part(lumpyGeo(0.066, 5), P('#E4A55A'), 'mid'), 0, 0.088, 0);
+  dome.scale.y = 0.5;
   if (bare) return;
-  swirl(g, 0.072, 0.1, p.frost || '#FFF3DC', 0, 0.1, 0);
-  sprinkles(g, rand, 22, 0, 0, 0, 0.06, 0.06, (x, z, d) => 0.1 + (1 - d) * 0.07 + 0.012);
+  swirl(g, 0.08, 0.11, p.frost || '#FFF3DC', 0, 0.092, 0);
+  sprinkles(g, rand, 22, 0, 0, 0, 0.055, 0.055, (x, z, d) => 0.1 + (1 - d) * 0.075 + 0.012);
   if (p.cherry) cherry(g, 0, 0.198, 0, 0.018);
 };
 
@@ -300,7 +419,7 @@ T.roundCake = (g, p, { P }) => {
 T.ringCake = (g, p, { P, bare, rand }) => {
   plate(g, 0.17);
   const pts = [V(0.04, 0), V(0.125, 0), V(0.135, 0.012), V(0.137, 0.1), V(0.128, 0.118), V(0.1, 0.126), V(0.06, 0.123), V(0.043, 0.113), V(0.037, 0.1), V(0.037, 0.012), V(0.04, 0)];
-  add(g, part(G.lathe(pts, 32), P('#E4AC62')), 0, 0.012, 0);
+  add(g, part(fluted(G.lathe(pts, 96), 16, 0.045, 'ring'), P('#E4AC62')), 0, 0.012, 0);
   const crown = add(g, part(G.torus(0.085, 0.022, TAU, 32), P('#F3D08A'), 'thin'), 0, 0.128, 0);
   crown.rotation.x = Math.PI / 2;
   crown.scale.z = 0.45;
@@ -370,8 +489,8 @@ T.cookies = (g, p, { P, bare, rand }) => {
     c.rotation.set(rx, rand() * 3, rz);
     g.add(c);
     const r = 0.065;
-    add(c, part(G.cyl(r, r * 0.97, 0.022, 0.009, 22), P(p.base)), 0, 0.011, 0);
-    const top = 0.022;
+    add(c, part(cookieGeo(r, 0.022, i + 1), P(p.base)), 0, 0.011, 0);
+    const top = 0.026;
     if (p.style === 'chips') for (let k = 0; k < 7; k++) {
       const a = rand() * TAU, d = Math.sqrt(rand()) * r * 0.75;
       add(c, part(G.sphere(0.008, 8, 6), '#5A3422', false), Math.cos(a) * d, top, Math.sin(a) * d);
@@ -447,6 +566,11 @@ T.donuts = (g, p, { P, bare, rand }) => {
     const gl = add(d, part(G.torus(0.048, 0.03, TAU, 24), glazeCol, 'thin'), 0, 0.03, 0);
     gl.rotation.x = Math.PI / 2;
     gl.scale.z = 0.55;
+    // glaze drips running down the outside
+    for (let i = 0; i < 7; i++) {
+      const a = (i / 7) * TAU + 0.3, len = 0.008 + ((i * 5) % 4) * 0.004;
+      add(d, part(G.capsule(0.0065, len), glazeCol, false), Math.cos(a) * 0.074, 0.024 - len / 2, Math.sin(a) * 0.074);
+    }
     sprinkles(d, rand, 12, 0, 0, 0, 0.07, 0.07, () => 0.042);
   };
   donut(-0.04, 0.012, 0.035, 0, '#FFF3DC');
@@ -512,9 +636,9 @@ T.fritter = (g, p, { P, bare, rand }) => {
 
 T.muffin = (g, p, { P, rand }) => {
   plate(g, 0.12);
-  add(g, part(G.cyl(0.07, 0.055, 0.08, 0.008, 24), stripeMat(C.blueDeep), 'mid'), 0, 0.052, 0);
-  const dome = add(g, part(G.sphere(0.085, 22, 14), P('#E4A55A')), 0, 0.1, 0);
-  dome.scale.y = 0.72;
+  add(g, part(fluted(G.cyl(0.07, 0.055, 0.08, 0.008, 72), 18, 0.035, 'mliner'), stripeMat(C.blueDeep), 'mid'), 0, 0.052, 0);
+  const dome = add(g, part(lumpyGeo(0.086, 9), P('#E4A55A')), 0, 0.1, 0);
+  dome.scale.y = 0.7;
   for (let i = 0; i < 8; i++) {
     const a = rand() * TAU, t = 0.25 + rand() * 0.6;
     const r = Math.sin(t * 1.4) * 0.08, y = 0.1 + Math.cos(t * 1.4) * 0.061;

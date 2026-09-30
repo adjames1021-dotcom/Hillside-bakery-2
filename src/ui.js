@@ -1,7 +1,7 @@
 // DOM side of the HUD: order tickets, interaction prompt, world-anchored speech
 // bubbles, the mini-game card, the recipe book and small overlays.
 import * as THREE from 'three';
-import { DESSERTS, BY_ID, CATEGORIES, STATIONS, TOPPINGS, TOPPING_BY_ID, dessertURL, toppingURL } from './desserts.js';
+import { DESSERTS, BY_ID, CATEGORIES, STATIONS, TOPPINGS, TOPPING_BY_ID, ING_PREP, dessertURL, toppingURL } from './desserts.js';
 import { ING_BY_ID, ingredientURL } from './ingredients.js';
 
 const $ = (s) => document.querySelector(s);
@@ -16,6 +16,13 @@ function gatherZone(items) {
 export function stepWhere(s) {
   return s.t === 'gather' ? gatherZone(s.items) : STATIONS[s.station].name;
 }
+
+const LAYER_COLORS = {
+  Bananas: '#FFE27A', Custard: '#FFE9A0', Wafers: '#E9C27E', 'Red layer': '#C84A4A', Frosting: '#FFF6E4',
+  Sponge: '#F8DE9C', 'Chocolate layer': '#6A4029', Fudge: '#4E2B1C', Biscuit: '#E9B06A', Strawberries: '#E4605E',
+  Graham: '#D9A05B', Chocolate: '#5A3422', Marshmallow: '#FFFBF0',
+};
+export const layerColor = (l) => LAYER_COLORS[l] || '#F3D9A6';
 
 export function stars(n) {
   return '★★★'.slice(0, n) + '☆☆☆'.slice(0, 3 - n);
@@ -38,7 +45,12 @@ export class UI {
       el: $('#game'), station: $('#gameStation'), title: $('#gameTitle'), hint: $('#gameHint'),
       meter: $('#gameMeter'), fill: $('#gameMeter i'), palette: $('#palette'), seq: $('#gameSeq'),
       tap: $('#gameTap'), leave: $('#gameLeave'), cursor: $('#vcursor'),
+      band: $('#gameMeter .band'), timing: $('#gameTiming'), zone: $('#gameTiming .zone'), needle: $('#gameTiming b'),
+      pips: $('#gamePips'), alt: $('#gameAlt'), altL: $('#altL'), altR: $('#altR'),
     };
+    this.dayEl = $('#dayText');
+    this.daySun = $('#daySun');
+    this.specialEl = $('#specialPill');
     this.book = { el: $('#book'), tabs: $('#tabs'), grid: $('#grid'), sub: $('#bookSub') };
     this.tab = 'orders';
     this.ticketBars = new Map();
@@ -94,7 +106,24 @@ export class UI {
       return;
     }
     this.carryEl.hidden = false;
-    if (this.carryEl.innerHTML !== html) this.carryEl.innerHTML = html;
+    // keep plain text in one flex item so it wraps as a sentence
+    if (!html.startsWith('<img')) html = `<span>${html}</span>`;
+    if (this.carryHTML !== html) {
+      this.carryHTML = html;
+      this.carryEl.innerHTML = html;
+    }
+  }
+
+  day(S, clockText, frac, special) {
+    const txt = `Day ${S.day} · ${clockText}`;
+    if (this.dayEl.textContent !== txt) this.dayEl.textContent = txt;
+    this.daySun.style.setProperty('--k', frac.toFixed(3));
+    const key = special ? special.id : '';
+    if (this.specialKey !== key) {
+      this.specialKey = key;
+      this.specialEl.hidden = !special;
+      if (special) this.specialEl.innerHTML = `<img src="${dessertURL(special)}" alt=""><span><small>Special</small><b>${special.name}</b></span>`;
+    }
   }
 
   // ---------------------------------------------------------------- world bubbles
@@ -130,17 +159,21 @@ export class UI {
     const item = tk.item;
     const stepIdx = item ? item.step : 0;
     const got = item ? item.got : new Set();
+    const raw = item ? item.raw : new Set();
     const where = !item ? 'not started' : item.where === 'hands' ? 'in your paws' : item.station && item.station.type === 'spot' ? 'resting on the island' : `at the ${item.station.name}`;
     let body;
     if (active) {
-      const steps = d.steps.map((s, i) => {
+      const steps = tk.steps.map((s, i) => {
         const cls = i < stepIdx ? 'done' : i === stepIdx ? 'now' : '';
         let icons = '';
         if (s.t === 'gather') {
           icons = `<span class="icons">${s.items.map((id) => {
             const have = i < stepIdx || (i === stepIdx && got.has(id));
-            return `<img class="${have ? 'got' : ''}" src="${ingredientURL(ING_BY_ID[id])}" alt="${ING_BY_ID[id].name}" title="${ING_BY_ID[id].name}">`;
+            const isRaw = i === stepIdx && raw.has(id);
+            const prepNote = s.needsPrep.includes(id) ? ` (${ING_PREP[id].label.toLowerCase()} at the Island)` : '';
+            return `<span class="ing ${have ? 'got' : ''} ${isRaw ? 'raw' : ''} ${s.needsPrep.includes(id) ? 'prep' : ''}"><img src="${ingredientURL(ING_BY_ID[id])}" alt="${ING_BY_ID[id].name}" title="${ING_BY_ID[id].name}${prepNote}"></span>`;
           }).join('')}</span>`;
+          if (i === stepIdx && raw.size) icons += `<span class="rawnote">Prep at the Island: ${[...raw].map((id) => ING_PREP[id].label).join(', ')}</span>`;
         } else if (s.t === 'decor') {
           icons = `<span class="icons">${s.tops.map((t) => `<img src="${toppingURL(TOPPING_BY_ID[t])}" alt="${TOPPING_BY_ID[t].name}" title="${TOPPING_BY_ID[t].name}">`).join('')}</span>`;
         }
@@ -149,16 +182,18 @@ export class UI {
       }).join('');
       body = `<ol class="tsteps">${steps}</ol>`;
     } else {
-      body = `<div class="tprog">Step ${Math.min(stepIdx + 1, d.steps.length)} of ${d.steps.length} · ${where}</div>`;
+      body = `<div class="tprog">Step ${Math.min(stepIdx + 1, tk.steps.length)} of ${tk.steps.length} · ${where}</div>`;
     }
     const q = item && item.stars < 3 ? `<span class="tq" title="Quality">${stars(item.stars)}</span>` : '';
+    const tags = [tk.variant ? `<span class="vtag ${tk.variant.kind}">${tk.variant.label}</span>` : '', tk.combo ? `<span class="vtag combo">${tk.combo}</span>` : '', tk.special ? '<span class="vtag special">Special</span>' : ''].join('');
     return `<article class="ticket ${active ? 'active' : ''}" data-id="${tk.id}" id="ticket-${tk.id}">
       <header><span class="tnum">${tk.num}</span><img class="tst" src="${dessertURL(d)}" alt=""><span class="tname"><b>${d.name}</b><small>for ${tk.customer.name} · ${where}</small></span>${q}</header>
+      ${tags ? `<div class="vtags">${tags}</div>` : ''}
       <div class="tbar"><i></i></div>${body}</article>`;
   }
 
   renderTickets(tickets, activeId) {
-    const key = tickets.map((t) => `${t.id}:${t.item ? `${t.item.step}|${[...t.item.got].join(',')}|${t.item.where}|${t.item.station?.id}|${t.item.stars}` : '-'}`).join(';') + '#' + activeId;
+    const key = tickets.map((t) => `${t.id}:${t.item ? `${t.item.step}|${[...t.item.got].join(',')}|${[...t.item.raw].join(',')}|${t.item.where}|${t.item.station?.id}|${t.item.stars}` : '-'}`).join(';') + '#' + activeId;
     if (key === this.lastTicketsKey) return;
     this.lastTicketsKey = key;
     const sorted = [...tickets].sort((a, b) => a.num - b.num);
@@ -185,25 +220,91 @@ export class UI {
 
   // ---------------------------------------------------------------- mini-game card
 
-  showGame({ station, title, hint, mode, tapLabel = 'Tap!', decor = null }) {
+  showGame({ station, title, hint, mode, tapLabel = 'Tap!', decor = null, game = null }) {
     const g = this.game;
     g.el.hidden = false;
     g.station.textContent = station;
     g.title.textContent = title;
     g.hint.textContent = hint;
     g.el.dataset.mode = mode;
-    g.meter.hidden = mode === 'decor';
-    g.palette.hidden = mode !== 'decor';
-    g.seq.hidden = mode !== 'decor';
-    g.tap.hidden = mode === 'decor' || mode === 'wiggle' || mode === 'roll';
+    const picks = mode === 'decor' || mode === 'order';
+    g.meter.hidden = picks || mode === 'hit' || mode === 'alternate';
+    g.band.hidden = mode !== 'fill';
+    g.timing.hidden = mode !== 'hit';
+    g.pips.hidden = !['hit', 'tap', 'alternate', 'swirl', 'zigzag'].includes(mode) || !game || game.n > 12;
+    g.alt.hidden = mode !== 'alternate';
+    g.palette.hidden = !picks;
+    g.seq.hidden = !picks;
+    g.tap.hidden = picks || ['wiggle', 'roll', 'alternate', 'swirl', 'zigzag'].includes(mode);
     g.tap.textContent = tapLabel;
     g.el.classList.remove('done');
+    this.pipsKey = '';
     this.setGameProgress(0);
     if (mode === 'decor') this.renderPalette(decor);
+    if (mode === 'order') this.renderLayers(game);
+    if (game) {
+      if (mode === 'fill') {
+        g.band.style.left = `${game.band[0] * 100}%`;
+        g.band.style.width = `${(game.band[1] - game.band[0]) * 100}%`;
+      }
+      this.renderMini(game);
+    }
+  }
+
+  /** Per-frame refresh of the mini-game widgets. */
+  renderMini(game) {
+    const g = this.game;
+    this.setGameProgress(game.progress);
+    if (game.mode === 'hit') {
+      g.zone.style.left = `${(game.zoneC - game.zoneW / 2) * 100}%`;
+      g.zone.style.width = `${game.zoneW * 100}%`;
+      g.needle.style.left = `${game.needle * 100}%`;
+      g.timing.classList.toggle('in', Math.abs(game.needle - game.zoneC) <= game.zoneW / 2);
+    }
+    if (!g.pips.hidden) {
+      const done = Math.min(game.n, Math.floor(game.count + 1e-6));
+      const key = `${done}/${game.n}`;
+      if (key !== this.pipsKey) {
+        this.pipsKey = key;
+        g.pips.innerHTML = Array.from({ length: game.n }, (_, i) => `<i class="${i < done ? 'on' : ''}"></i>`).join('');
+      }
+    }
+    if (game.mode === 'alternate') {
+      g.altL.classList.toggle('next', game.expect === 'L' && !game.done);
+      g.altR.classList.toggle('next', game.expect === 'R' && !game.done);
+    }
+    if (game.mode === 'order') this.renderLayerSeq(game);
+  }
+
+  renderLayers(game) {
+    this.game.palette.innerHTML = game.choices.map((l, i) => `<button class="top layer" type="button" data-layer="${l}" id="layer-${i + 1}"><span class="lswatch" style="--c:${layerColor(l)}"></span><span>${l}</span><kbd>${i + 1}</kbd></button>`).join('');
+    this.renderLayerSeq(game);
+  }
+
+  renderLayerSeq(game, wrong = null) {
+    const key = `${game.count}|${wrong}`;
+    if (key === this.layerKey && !wrong) return;
+    this.layerKey = key;
+    this.game.seq.innerHTML = 'Build it: ' + game.seq.map((l, i) => `<span class="chip ${i < game.count ? 'got' : i === game.count ? 'next' : ''}"><span class="lswatch" style="--c:${layerColor(l)}"></span>${l}</span>`).join('<span class="arrow">›</span>');
+    if (wrong) {
+      const b = this.game.palette.querySelector(`[data-layer="${wrong}"]`);
+      if (b) {
+        b.classList.remove('wrong');
+        void b.offsetWidth;
+        b.classList.add('wrong');
+      }
+    }
   }
 
   setGameProgress(k) {
     this.game.fill.style.width = `${Math.max(0, Math.min(1, k)) * 100}%`;
+  }
+
+  flashGame(kind) {
+    const el = this.game.el;
+    el.classList.remove('hit', 'miss');
+    void el.offsetWidth;
+    el.classList.add(kind);
   }
 
   gameDone(text = 'Done!') {
@@ -248,7 +349,7 @@ export class UI {
   // ---------------------------------------------------------------- recipe book
 
   renderBook(state) {
-    const unlocked = CATEGORIES.filter((c) => state.served >= c.unlock).map((c) => c.id);
+    const unlocked = CATEGORIES.filter((c) => state.day >= c.day).map((c) => c.id);
     const wanted = state.tickets.map((t) => t.d.id);
     if (this.tab === 'orders' && !wanted.length) this.tab = 'pies';
     this.book.tabs.innerHTML = [
@@ -259,10 +360,9 @@ export class UI {
     this.book.grid.innerHTML = list.map((d) => {
       const cat = CATEGORIES.find((c) => c.id === d.cat);
       const locked = !unlocked.includes(d.cat);
-      const need = cat.unlock - state.served;
       const steps = d.steps.map((s) => {
         let icons = '';
-        if (s.t === 'gather') icons = s.items.map((id) => `<img src="${ingredientURL(ING_BY_ID[id])}" alt="${ING_BY_ID[id].name}" title="${ING_BY_ID[id].name}">`).join('');
+        if (s.t === 'gather') icons = s.items.map((id) => `<span class="ing got ${s.needsPrep.includes(id) ? 'prep' : ''}"><img src="${ingredientURL(ING_BY_ID[id])}" alt="${ING_BY_ID[id].name}" title="${ING_BY_ID[id].name}${s.needsPrep.includes(id) ? ` (${ING_PREP[id].label.toLowerCase()} at the Island)` : ''}"></span>`).join('');
         if (s.t === 'decor') icons = s.tops.map((t) => `<img src="${toppingURL(TOPPING_BY_ID[t])}" alt="${TOPPING_BY_ID[t].name}" title="${TOPPING_BY_ID[t].name}">`).join('');
         const label = s.t === 'gather' ? 'Gather' : s.t === 'decor' ? 'Decorate' : s.label;
         return `<li><b>${label}</b> <em>${stepWhere(s)}</em>${icons ? `<span class="icons">${icons}</span>` : ''}</li>`;
@@ -271,7 +371,7 @@ export class UI {
         ${wanted.includes(d.id) ? '<span class="badge">Ordered</span>' : ''}
         <img class="card-img" src="${dessertURL(d, locked)}" alt="" width="84" height="84">
         <h3 class="card-name">${d.name}</h3>
-        ${locked ? `<p class="card-desc">Serve ${need} more treat${need === 1 ? '' : 's'} to unlock.</p>` : `<p class="card-desc">${d.desc}</p><ol class="card-steps">${steps}</ol>`}
+        ${locked ? `<p class="card-desc">Joins the menu on day ${cat.day}.</p>` : `<p class="card-desc">${d.desc}</p><ol class="card-steps">${steps}</ol>`}
       </article>`;
     }).join('');
   }

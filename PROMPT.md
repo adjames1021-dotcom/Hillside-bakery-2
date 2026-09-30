@@ -1,17 +1,17 @@
-# Hillside Bakery: game prompt (v2)
+# Hillside Bakery: game prompt (v3)
 
-An improved version of the original prompt. It asks for a first-person game, a real pantry with Dry and Cold Storage, a center prep island, deeper step-by-step recipes and better graphics. The game in this repository is built from it.
+An improved version of the original prompt. It asks for a first-person game, a real pantry with Dry and Cold Storage, a center prep island, deep step-by-step recipes with ingredient prep and signature mini-games, custom orders, a day-by-day shop loop with a morning market, and detailed clay-miniature food. The game in this repository is built from it.
 
 ---
 
 ## The pitch
 
-Build a cozy **first-person** baking game in Three.js. You are a small fox baker in a tiny hillside bakery. Animal customers come in and sit at café tables. You walk up and take their order, and it becomes a paper ticket with a recipe card. Then you gather ingredients from **Dry Storage** and **Cold Storage** and work through the recipe at the kitchen stations. Serve the finished dessert at the table. There is no failing: mistakes only lower a treat's 1–3 star quality. The mood is a warm afternoon in a tiny shop: calm, wholesome and bouncy.
+Build a cozy **first-person** baking game in Three.js. You are a small fox baker running a tiny hillside bakery one day at a time. Animal customers come in and sit at café tables. You walk up and take their order, and it becomes a paper ticket with a recipe card. Then you gather and prep ingredients from **Dry Storage** and **Cold Storage** and work through the recipe at the kitchen stations, where every step is a small hands-on game. Serve the finished dessert at the table, and after closing, spend your coins at the morning market. There is no failing: mistakes only lower a treat's 1–3 star quality. The mood is a warm afternoon in a tiny shop: calm, wholesome and bouncy.
 
 ## Camera and controls
 
 - **First person** is the whole game. Eye height is about 1.25 m (a chibi animal), FOV 72° on desktop and wider on portrait phones, with a very gentle head-bob and soft footsteps.
-- **Desktop:** mouse look with pointer lock, WASD to walk, E, Space or click to use, 1–4 to pick a ticket, R for the recipe book, Q to step back from a station. If pointer lock is unavailable (for example in an embedded frame), fall back to drag-to-look, and count a press as a click only if the mouse doesn't move.
+- **Desktop:** mouse look with pointer lock, WASD to walk, E, Space or click to use, 1–4 to pick a ticket, R for the recipe book, B for the morning market, A/D or the arrow keys for left/right games, 1–9 for layers, Q to step back from a station. If pointer lock is unavailable (for example in an embedded frame), fall back to drag-to-look, and count a press as a click only if the mouse doesn't move.
 - **Touch:** a left joystick to walk, drag anywhere to look, and a big orange **Use** button.
 - **Aiming:** a small crosshair picks whatever it points at within about 2.4 m. The target gets a warm butter-yellow outline and a pill prompt such as "E · Grab Apples". Pick the target by distance along the ray plus distance from the crosshair line, so neighbouring crates don't steal the aim.
 - **Paws:** show two fluffy fox paws in chef sleeves at the bottom of the screen. They carry the current item (a mixing bowl, then the dessert on a plate), reach out when you grab something, and bob only slightly as you walk. Everything placed on counters, shelves and tables must rest on the surface, never float. Render them in a separate pass so they never clip into counters.
@@ -38,37 +38,78 @@ Every ingredient is a small 3D object on a shelf, with a hand-lettered tag. You 
 
 ## Recipe cards (the deeper cooking)
 
-Each dessert is a card of 3–7 steps done in order. The active ticket shows every step, where it happens and which ingredients or toppings it needs.
+Each dessert is a card of 3–8 steps done in order (about 5.5 on average). The active ticket shows every step, where it happens and which ingredients or toppings it needs. Recipes must not feel repetitive: each has its own **signature step** (weave the lattice, crimp the edges, pipe the swirl, layer the pudding, dip and twirl, spin the floss), and the same station plays differently depending on the verb on the card.
 
-| Step | Where | How it plays |
+**Mise en place.** Staples (flour, sugar, butter, milk, oats…) go straight into the bowl. Special ingredients must be prepped at the island before the gather step counts as done, so the ingredients that make a recipe special also shape how it plays:
+
+- crack the eggs (timing), pit the cherries (timing)
+- peel the apples (circles), core the pineapple (circles)
+- slice the peaches, hull the strawberries (taps)
+- peel the bananas (side to side)
+- grate the carrots, zest the lemons (roll)
+- squeeze the limes (hold)
+- mash the sweet potatoes and pumpkin; chop the chocolate, pecans and bread (taps)
+
+A "!" in the recipe data means use it whole (the apple on a caramel apple, the chocolate square in a s'more). The ticket shows a little knife badge on ingredients that need prep. While you prep, the whole ingredient sits on the cutting board and squashes with each stroke.
+
+**Mini-games.** Every active step is one of these, shown in a card at the bottom of a close-up camera:
+
+| Game | Controls | Used for |
 | --- | --- | --- |
-| **Gather** | Dry / Cold Storage | Grab each listed ingredient. Some recipes gather twice (crust first, filling later). |
-| **Mix** (knead, whisk, cream, whip, blend) | Mixing Bowl | Close-up mini-game: wiggle the mouse in circles, or tap Space, to fill the meter while the whisk spins. |
-| **Prep** (roll, chop, slice, scoop, fill, pour, cut) | Prep Island | Close-up mini-game in one of four modes: **tap** (N chops), **roll** (move the mouse up and down), **wiggle** (scoop or spin), **hold** (pour). |
-| **Bake** | Oven | Passive. A gauge runs baking → **golden** → toasty → burnt, and the oven dings at golden. Take it out while golden for full stars. Toasty costs 1 star and burnt costs 2, and the treat turns darker. |
-| **Cook** (fry, melt, toast) | Stove | Passive, but the pot calls "Stir!" twice. Stir within about 5 s or it scorches (−1 star). |
-| **Chill** (set, frost, freeze) | Freezer | Passive. The lid pops open when it's done. |
-| **Decorate** | Decorating Table | A palette of 12 toppings (whipped cream, frosting, hot fudge, pink icing, sugar glaze, sprinkles, cherries, strawberries, chopped nuts, powdered sugar, caramel, chocolate curls). Add the ones on the card in order. Two or more mistakes cost a star. |
+| Tap | Click, tap or Space per stroke | chop, press a crumb crust, knead |
+| Timing | Tap while a sliding marker is in the green zone. The zone moves and the slider speeds up after each hit. Three misses cost a star. | crimp edges, cut rings and shapes, scoop dough balls, split a banana, flip a cake, float a scoop |
+| Pour to the line | Hold to fill a gauge and let go inside the striped band. Overfilling or spilling costs a star. | fill liners and cups, pour filling, dip in glaze, scoop ice cream |
+| Circles | Move the mouse or a finger in smooth circles, counted by accumulated turning angle | pipe buttercream, whisk, beat, peel, smooth, spin cotton candy |
+| Side to side | Sweep left and right | fold, scatter crumble, drizzle glaze or caramel |
+| Left / right | Alternate with A/D, the arrow keys, mouse flicks or two big buttons. Going to the wrong side three times costs a star. | weave a lattice, fork crisscross |
+| Layers | Press layer chips in the right order (keys 1–9). Two mistakes cost a star. | banana pudding, layered and stacked cakes, s'mores, shortcake |
+| Roll / hold / wiggle | Move up and down, hold, or wiggle | roll out dough, squeeze, beat fudge |
+
+The **Mixing Bowl** reads the verb on the card: *knead* is tapping, *fold / stir / soak* is side to side, and *whisk / beat / cream / whip / blend* is circles. **Bake** (Oven), **Cook** (Stove; stir twice when it bubbles) and **Chill** (Freezer) stay passive so you can juggle orders. The oven gauge runs baking → golden → toasty → burnt, and you can watch the treat through the glass door. The **Decorating Table** has a palette of 12 toppings, added in ticket order.
 
 Rules:
 
 - One item per ticket. It lives in your paws, at a station, or on an island spot. Passive stations keep working while you start other orders, and that multitasking is the skill.
-- The treat you carry changes as you go: a bowl with each ingredient in its own little pile (flour mound, butter cubes, a cracked egg, berries, a milk pool), then a bowl of batter, then a pale unbaked version, then a plain baked version, then the decorated final.
+- The treat you carry changes as you go: a bowl with each ingredient in its own little pile, then a bowl of batter, then a pale unbaked version, then a plain baked version, then the decorated final.
 - If a customer leaves, their treat stays on the counter and joins the next order for the same dessert.
 - Examples:
-  - **Apple Pie:** gather flour, butter, apples, cinnamon → knead the dough → roll & fill the crust → bake until golden.
-  - **Pecan Pie:** gather flour, butter → knead → roll the crust → gather pecans, caramel, eggs → arrange the pecans → bake.
-  - **Cheesecake:** gather graham, butter → press the crust → gather cream cheese, eggs, sugar → beat until silky → bake gently → chill → decorate with strawberries.
-  - **Glazed Donuts:** gather flour, milk, eggs, sugar → knead → cut rings → fry (stir!) → decorate with sugar glaze and sprinkles.
-  - **Sundae:** gather ice cream → scoop → decorate with hot fudge, whipped cream and a cherry.
+  - **Apple Pie:** gather flour, butter, apples, cinnamon → peel the apples → knead → roll out the crust → weave the lattice (left/right) → bake until golden.
+  - **Pecan Pie:** gather flour, butter → knead → roll the crust → crimp the edges (timing) → gather pecans, caramel, eggs → chop the pecans, crack the eggs → pour in the filling (pour to the line) → bake until set.
+  - **Banana Pudding:** gather bananas, milk, eggs, sugar → peel the bananas, crack the eggs → stir the custard → layer wafers, bananas, custard ×2 (layers) → chill → whipped cream.
+  - **Cupcake:** gather and crack the eggs → whisk (circles) → fill the liners (pour) → bake → pipe the buttercream swirl (circles) → sprinkles and a cherry.
+  - **Cotton Candy:** melt the sugar → spin the floss (circles).
+
+## Custom orders
+
+- Regulars sometimes make a **special request**, shown as a tag on the ticket and under their bubble:
+  - **+ a topping** (extra sprinkles, fudge, strawberries…)
+  - **Make it pink**
+  - **No nuts** (the nuts topping comes off the card)
+  - **Extra toasty** (the toasty oven zone gives full stars and golden costs one)
+  - **In a hurry** (less patience, 1.5× coins)
+
+  Requests pay a small bonus. Follow the ticket, not the recipe book.
+- From day 3 some customers order **two treats**. They get two linked tickets ("1 of 2", "2 of 2") and one shared patience bar, and they wait for both plates before eating.
+
+## The shop day
+
+- **Morning (8 AM):** the door sign says Closed. A **daily special** is picked; it pays +50% coins, or double with the Specials Board. Flip the sign at the door to open, or it opens itself at 9. B opens the market during the morning.
+- **Open (9 AM to 5 PM, about 6.5 minutes):** customers come in, at most 2–4 at once depending on the day. Last orders are at 4:30. At 5 the sign flips, and anyone still waiting gets a shorter fuse.
+- **Day summary:** treats served, coins, tips, average stars, customers who went home hungry, the crowd favourite and what joins the menu tomorrow.
+- **Morning market:** three tabs.
+  - **Pantry:** each ingredient has a shelf count (8, or 14 with Bigger Shelves), and every grab uses one. Restock one ingredient or everything at 1–3 coins per unit.
+  - **Upgrades:** Speedy Oven, Oven Thermometer, Stand Mixer, Sharp Knife, Copper Pot, Frosty Freezer, Comfy Cushions, Tip Jar and Bigger Shelves.
+  - **Decor** that appears in the room, each with a small bonus: Sunflower Planters, Paper Lanterns, Hanging Ferns, a Specials chalkboard easel that shows today's special, and a sleeping Shop Cat.
+- Customers only order what the pantry can still make. The prompt says "Grab Apples (4 left)", and an empty shelf says "Out of Apples!".
+- Menu sections join by day: Pies and Cookies on day 1, Pastries on day 2, Cakes on day 3, Cold & Frozen on day 4, and Candy & Campfire on day 5.
 
 ## Customers and progression
 
 - Chibi cats, bunnies, bears and puppies walk in through the door with a puff and sit down.
 - A bouncing **!** bubble means they're ready to order. After you take the order, the bubble shows the dessert sticker and a patience bar that turns orange when low. Customers are patient: a few minutes per order, more for longer recipes.
 - Customers wave and turn their heads to look at you when you're close. They eat in three bites with hearts, then leave.
-- Coins depend on recipe length, stars and remaining patience. Serving treats unlocks menu sections in this order: Pies and Cookies at the start, then Pastries (3 served), Cakes (6), Cold & Frozen (10) and Candy & Campfire (14).
-- Early orders favour short recipes. At most 2 customers at once, rising to 4.
+- Coins depend on recipe length, stars, remaining patience, special requests, the daily special, decor bonuses and the tip jar.
+- Early orders on day 1 favour short recipes. At most 2 customers at once, rising to 4 by day 3.
 
 ## Art direction
 
@@ -79,15 +120,24 @@ Rules:
 - **Faces:** only the customers have faces. Appliances stay plain and cute through their shapes and colors.
 - **Decor:** gingham, scalloped awnings, string lights, bunting between the beams, potted plants, wicker baskets, flour sacks with hand-lettered labels, framed pictures and wall sconces.
 - **Effects:** additive glows on lamps and bulbs, white puff clouds, hearts, sparkles, floating coins, steam from hot treats and chimneys, and dust motes in the window light.
-- **Desserts:** real 3D clay-miniature models, built procedurally from about 30 templates (pies with lattices, layered cake wedges, cupcakes, cookies, bars, donuts, sundaes, floats and more). Each has plain, unbaked and toasty variants. Flat sticker icons of the same desserts are used in the UI.
+- **Desserts:** real 3D clay-miniature models, built procedurally from about 30 templates (pies, layered cake wedges, cupcakes, cookies, bars, donuts, sundaes, floats and more). Each has plain, unbaked and toasty variants. Flat sticker icons of the same desserts are used in the UI. Add detailed shapes where they matter:
+  - frosting and whipped cream as a **star-tip piped swirl** (a ridged tube coiling up a cone to a curled tip)
+  - pies with a **fluted tin**, a **pinched crust rim** and a real **over-under woven lattice**
+  - **pleated** cupcake and muffin liners, and lumpy muffin tops
+  - cookies with **irregular hand-made edges** and domed middles
+  - glaze drips on donuts, and a fluted ring cake
+  - strawberries with seeds and a leafy star
+- **Ingredients:** fruit uses real lathe silhouettes: dimpled apples with a leaf and blush, peaches, pointed lemons and limes lying on their side, curved tapered bananas with brown tips, ribbed pumpkins, ringed carrots with feathery tops, egg-shaped eggs, and cherries with stems.
 
 ## UI
 
 - Rounded "Fredoka"-style font. Cream pill buttons with thick brown borders and a hard drop shadow, with orange for primary actions.
-- **Tickets** are paper cards pinned at the top left. The active one shows the numbered steps, with ingredient and topping icons that tick off as you go.
+- **Tickets** are paper cards pinned at the top left. The active one shows the numbered steps, with ingredient and topping icons that tick off as you go, knife badges on ingredients that need prep, and tags for special requests, two-treat orders and the daily special.
+- A top-center pill shows the day and a clock face that fills through open hours, next to a pill with today's special.
 - World speech bubbles with tails float over customers and busy stations: oven gauge, "Stir!", "Chilled!".
 - A bottom line always says what you're carrying and what to do next.
-- A mini-game card appears at the bottom during station close-ups.
+- A mini-game card appears at the bottom during station close-ups: a progress meter, a timing bar with a green zone, a pour gauge with a striped target band, progress pips, Left/Right buttons, or layer chips.
+- The day summary is a big cream card, and the morning market is a sheet with Pantry, Upgrades and Decor tabs, sticker icons and stock bars.
 - The recipe book lists every recipe card by section.
 
 ## Tech
@@ -95,7 +145,7 @@ Rules:
 - Three.js with `MeshToonMaterial` on a 4-step gradient map, screen-space inverted-hull outlines, `RoundedBoxGeometry`, canvas-drawn flat textures with world-space UVs (so wallpaper and planks tile evenly) and a shared label atlas.
 - Bake the sun's shadow map once, since the room is static. Characters use soft blob shadows.
 - Merge static meshes by material to keep the room to a few hundred draw calls. Lower the pixel ratio automatically on slow devices.
-- Save coins and progress in `localStorage`.
+- Save coins, the day, pantry stock, upgrades and decor in `localStorage`.
 
 ## The 50 desserts
 

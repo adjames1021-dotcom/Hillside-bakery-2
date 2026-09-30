@@ -98,6 +98,21 @@ kbd {
   display: flex; align-items: center; justify-content: flex-end; gap: 10px; flex-wrap: wrap; max-width: 52vw;
 }
 .hud-right .btn { padding: 9px 14px 8px; font-size: 14px; }
+.hud-top {
+  position: absolute; left: 50%; top: calc(12px + env(safe-area-inset-top, 0px)); transform: translateX(-50%);
+  display: flex; align-items: center; gap: 10px;
+}
+.hud-top .btn { padding: 8px 12px 7px; font-size: 14px; }
+.day-pill b { font-size: 15px; white-space: nowrap; }
+.sun {
+  --k: 0; position: relative; width: 26px; height: 26px; flex: none; border-radius: 50%; border: 3px solid var(--ink); box-sizing: border-box;
+  background: conic-gradient(var(--orange) calc(var(--k) * 360deg), #FFF3DC 0);
+}
+.special-pill { padding: 3px 12px 3px 4px; gap: 6px; }
+.special-pill img { width: 34px; height: 34px; }
+.special-pill span { display: grid; line-height: 1.05; }
+.special-pill small { font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em; color: var(--pumpkin); opacity: 1; }
+.special-pill b { font-size: 13.5px; min-width: 0; }
 
 #crosshair {
   position: absolute; left: 50%; top: 50%; width: 10px; height: 10px; margin: -5px 0 0 -5px;
@@ -125,7 +140,7 @@ kbd {
 #carry kbd { margin: 0 2px; }
 
 .toast {
-  position: absolute; left: 50%; top: calc(14px + env(safe-area-inset-top, 0px));
+  position: absolute; left: 50%; top: calc(74px + env(safe-area-inset-top, 0px));
   transform: translate(-50%, -12px); opacity: 0;
   background: var(--cream2); border: 3px solid var(--ink); border-radius: 18px;
   padding: 8px 16px; font-weight: 600; font-size: 15px; box-shadow: 0 4px 0 var(--ink);
@@ -192,8 +207,26 @@ kbd {
 .st-top em { font-style: normal; font-size: 11.5px; opacity: .75; white-space: nowrap; }
 .icons { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 3px; }
 .icons img { width: 26px; height: 26px; border-radius: 8px; background: #fff; border: 2px solid transparent; filter: saturate(.35) opacity(.6); }
-.icons img.got { filter: none; border-color: var(--sageDark); background: #EEF6E6; }
+.icons .ing { position: relative; display: inline-flex; }
+.icons .ing.got img { filter: none; border-color: var(--sageDark); background: #EEF6E6; }
+.icons .ing.prep::after {
+  content: ""; position: absolute; right: -3px; bottom: -3px; width: 12px; height: 12px; border-radius: 50%;
+  border: 2px solid var(--ink); background: #fff no-repeat center/8px url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M1 9 7 3l2-2-1 3-6 6z' fill='%234B2E1D'/%3E%3C/svg%3E");
+}
+.icons .ing.got.prep::after { background-color: var(--sage); }
+.icons .ing.raw img { border-color: var(--pumpkin); background: #FDE9D2; }
+.icons .ing.raw::after { background-color: var(--orange); }
 .tsteps li.done .icons img, .tsteps li:not(.now) .icons img { filter: none; }
+.rawnote { flex-basis: 100%; font-size: 11.5px; font-weight: 600; color: #B4541E; }
+.tsteps li.done { padding-top: 2px; padding-bottom: 2px; font-size: 12px; }
+.tsteps li.done .icons { display: none; }
+.vtags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 5px; }
+.vtag { font-size: 11.5px; font-weight: 600; padding: 1px 8px 2px; border-radius: 99px; border: 2px solid var(--ink); background: var(--pink); white-space: nowrap; }
+.vtag.toasty { background: #F6C08A; }
+.vtag.rush { background: var(--butter); }
+.vtag.nonuts { background: var(--sage); }
+.vtag.combo { background: var(--blue); }
+.vtag.special { background: var(--orange); }
 
 /* ------------------------------------------------ world bubbles */
 #labels { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
@@ -209,11 +242,14 @@ kbd {
 }
 .bubble.order { padding: 4px 8px 8px; display: grid; justify-items: center; gap: 3px; }
 .bubble.order .bang { font-size: 34px; font-weight: 700; color: var(--pumpkin); line-height: 1; -webkit-text-stroke: 1.5px var(--ink); padding: 2px 8px 0; }
-.bubble.order img { width: 54px; height: 54px; display: none; }
+.bubble.order .imgs { display: none; gap: 4px; }
+.bubble.order .bo { display: grid; justify-items: center; }
+.bubble.order .bo img { width: 54px; height: 54px; }
+.bubble.order .bo em { font-style: normal; font-size: 11px; font-weight: 600; white-space: nowrap; padding: 0 6px 1px; margin-top: -4px; border-radius: 99px; border: 2px solid var(--ink); background: var(--pink); }
 .bubble.order .bar { width: 50px; height: 8px; border-radius: 99px; border: 2px solid var(--ink); background: #fff; overflow: hidden; display: block; }
 .bubble.order .bar i { display: block; height: 100%; background: var(--sage); }
 .bubble.order.taken .bang { display: none; }
-.bubble.order.taken img { display: block; }
+.bubble.order.taken .imgs { display: flex; }
 .bubble.order.low .bar i { background: var(--pumpkin); }
 .bubble.order:not(.taken) { animation: hopb 1s ease-in-out infinite; }
 .bubble.order.low { animation: wiggle 1s ease-in-out infinite; }
@@ -252,6 +288,27 @@ kbd {
 .game-hint { margin: 0; font-size: 14.5px; opacity: .8; }
 .meter { height: 22px; border: 3px solid var(--ink); border-radius: 99px; background: #fff; overflow: hidden; }
 .meter i { display: block; height: 100%; width: 0; background: var(--orange); border-radius: 99px; transition: width .08s linear; }
+.meter { position: relative; }
+.meter .band { position: absolute; top: 0; bottom: 0; background: repeating-linear-gradient(-45deg, #CFE5C2 0 6px, #B9D8A8 6px 12px); border-left: 3px solid var(--sageDark); border-right: 3px solid var(--sageDark); }
+.meter .band + i { position: relative; opacity: .92; }
+.timing { position: relative; height: 30px; border: 3px solid var(--ink); border-radius: 99px; background: #fff; overflow: hidden; }
+.timing .zone { position: absolute; top: 0; bottom: 0; background: var(--sage); border-left: 3px solid var(--sageDark); border-right: 3px solid var(--sageDark); }
+.timing b { position: absolute; top: 2px; bottom: 2px; width: 8px; margin-left: -4px; border-radius: 4px; background: var(--ink); }
+.timing.in b { background: var(--pumpkin); box-shadow: 0 0 0 2px var(--ink); }
+.pips { display: flex; justify-content: center; gap: 6px; flex-wrap: wrap; }
+.pips i { width: 16px; height: 16px; border-radius: 50%; border: 3px solid var(--ink); background: #fff; }
+.pips i.on { background: var(--orange); }
+.alt { display: flex; justify-content: center; gap: 14px; }
+.alt .btn { min-width: 130px; }
+.alt .btn.next { background: var(--butter); transform: translateY(-2px); box-shadow: 0 6px 0 var(--ink); }
+.layer { grid-template-columns: auto; padding: 8px 6px; font-size: 13px; }
+.lswatch { display: inline-block; width: 26px; height: 14px; border-radius: 6px; border: 2px solid var(--ink); background: var(--c); }
+.top.layer .lswatch { width: 40px; height: 22px; margin-bottom: 3px; }
+.seq .chip .lswatch { margin: 3px 2px 3px 3px; }
+#game[data-mode="order"] .palette { grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); }
+#game.hit { animation: okflash .35s ease; }
+#game.miss { animation: wiggle .3s ease-in-out 1; }
+@keyframes okflash { 40% { background: #EEF6E6; } }
 #game.done { background: #EEF6E6; }
 #game.done .meter i { background: var(--sage); }
 .game-actions { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-top: 2px; }
@@ -317,6 +374,41 @@ kbd {
 .card.locked .card-name { opacity: .6; }
 .badge { position: absolute; top: -10px; right: 10px; font-size: 12px; font-weight: 700; padding: 3px 9px; border: 2px solid var(--ink); border-radius: 99px; background: var(--pink); }
 
+/* ------------------------------------------------ market */
+.btn.small { font-size: 13.5px; padding: 6px 12px 5px; border-width: 3px; box-shadow: 0 3px 0 var(--ink); }
+.btn:disabled { opacity: .5; cursor: default; transform: none; }
+.market-coins { margin-left: auto; flex: none; }
+.sheet-head .market-coins + .btn { margin-left: 0; }
+.market-tabs { align-items: center; justify-content: space-between; gap: 12px; }
+.tabs-row { display: flex; gap: 8px; }
+.grid.market.pantry { grid-template-columns: repeat(auto-fill, minmax(128px, 1fr)); gap: 10px; }
+.grid.market.goods { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
+.mcard {
+  display: grid; justify-items: center; align-content: start; gap: 4px; text-align: center;
+  background: #fff; border: 3px solid var(--ink); border-radius: 18px; padding: 8px 8px 10px; box-shadow: 0 4px 0 var(--ink);
+}
+.mcard img { width: 52px; height: 52px; }
+.mcard h3 { margin: 0; font-size: 14.5px; font-weight: 600; line-height: 1.1; }
+.mcard small { font-size: 11.5px; opacity: .75; }
+.mcard p { margin: 0 0 4px; font-size: 13px; line-height: 1.3; opacity: .8; }
+.mcard.big img.mico { width: 72px; height: 72px; }
+.mcard.big h3 { font-size: 17px; }
+.mcard.low { background: #FFF6E4; }
+.mcard.out { background: #FDE9D2; }
+.mcard.owned { background: #EEF6E6; }
+.stockbar { width: 100%; height: 9px; border: 2px solid var(--ink); border-radius: 99px; background: #fff; overflow: hidden; box-sizing: border-box; }
+.stockbar i { display: block; height: 100%; background: var(--sage); }
+.mcard.low .stockbar i { background: var(--orange); }
+.sheet-foot { flex: none; display: flex; justify-content: center; padding: 12px 16px 16px; border-top: 3px solid var(--ink); background: var(--cream); }
+.summary-card { width: min(520px, 100%); }
+.sum-stats { list-style: none; margin: 0 0 12px; padding: 0; display: grid; gap: 6px; text-align: left; }
+.sum-stats li { display: flex; justify-content: space-between; padding: 6px 12px; border-radius: 12px; background: #fff; border: 2px solid var(--ink); font-size: 16px; }
+.sum-stats b { font-variant-numeric: tabular-nums; }
+.sum-best { display: flex; align-items: center; justify-content: center; gap: 8px; margin: 0 0 10px; font-size: 15px; }
+.sum-next { margin: 0 0 14px; font-size: 15px; text-wrap: balance; }
+.sum-best img { width: 44px; height: 44px; }
+.sum-next { background: var(--butter); border: 2px solid var(--ink); border-radius: 12px; padding: 6px 10px; }
+
 /* ------------------------------------------------ overlays */
 .overlay {
   position: absolute; inset: 0; display: grid; place-items: center; padding: 16px; z-index: 12;
@@ -350,8 +442,12 @@ kbd {
 }
 body[data-mode="title"] #tickets, body[data-mode="swoop"] #tickets,
 body[data-mode="title"] .hud-right, body[data-mode="swoop"] .hud-right,
+body[data-mode="title"] .hud-top, body[data-mode="swoop"] .hud-top,
 body[data-mode="title"] #touch, body[data-mode="swoop"] #touch,
-body[data-mode="focus"] #touch, body[data-mode="book"] #touch { display: none; }
+body[data-mode="focus"] #touch, body[data-mode="book"] #touch,
+body[data-mode="summary"] #touch, body[data-mode="market"] #touch,
+body[data-mode="summary"] #tickets, body[data-mode="market"] #tickets,
+body[data-mode="summary"] .hud-top, body[data-mode="market"] .hud-top { display: none; }
 body[data-mode="focus"] #carry { display: none; }
 
 /* ------------------------------------------------ touch */
@@ -386,6 +482,14 @@ body[data-mode="focus"] #carry { display: none; }
   .hud-right { gap: 6px; max-width: 46vw; }
   .hud-right .btn { font-size: 13px; padding: 7px 10px 6px; }
   .pill small { display: none; }
+  .special-pill span { display: none; }
+  .hud-top { left: auto; right: 16px; transform: none; top: calc(112px + env(safe-area-inset-top, 0px)); gap: 6px; flex-direction: column; align-items: flex-end; }
+  body[data-mode="focus"] #tickets { display: none; }
+  body[data-mode="focus"] .toast { top: calc(12px + env(safe-area-inset-top, 0px)); bottom: auto; }
+  .day-pill b { font-size: 13px; }
+  .grid.market.pantry { grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); }
+  .market-tabs { flex-wrap: wrap; }
+  .alt .btn { min-width: 0; flex: 1; }
   #tickets { width: min(230px, 50vw); }
   .ticket:not(.active) .tname small, .ticket:not(.active) .tprog { display: none; }
   .tsteps li { font-size: 12px; }
@@ -421,7 +525,12 @@ body[data-mode="focus"] #carry { display: none; }
 
   <aside id="tickets" aria-label="Order tickets" aria-live="polite"></aside>
 
+  <div class="hud-top">
+    <div class="pill day-pill" id="dayPill" title="Shop hours 9 AM to 5 PM"><span class="sun" id="daySun" aria-hidden="true"></span><b id="dayText">Day 1</b></div>
+    <div class="pill special-pill" id="specialPill" hidden></div>
+  </div>
   <div class="hud-right">
+    <button class="btn primary" id="marketBtn" type="button" hidden>Market <kbd>B</kbd></button>
     <div class="pill" id="coinPill" title="Coins"><span class="coin-ico" aria-hidden="true"></span><b id="coins">0</b></div>
     <div class="pill" title="Treats served"><span class="heart-ico" aria-hidden="true"></span><b id="served">0</b><small>served</small></div>
     <button class="btn" id="bookBtn" type="button">Recipes</button>
@@ -435,7 +544,13 @@ body[data-mode="focus"] #carry { display: none; }
     <p class="game-station" id="gameStation"></p>
     <h2 class="game-title" id="gameTitle"></h2>
     <p class="game-hint" id="gameHint"></p>
-    <div class="meter" id="gameMeter"><i></i></div>
+    <div class="meter" id="gameMeter"><span class="band" hidden></span><i></i></div>
+    <div class="timing" id="gameTiming" hidden><span class="zone"></span><b></b></div>
+    <div class="pips" id="gamePips" hidden></div>
+    <div class="alt" id="gameAlt" hidden>
+      <button class="btn big" id="altL" type="button"><kbd>A</kbd> Left</button>
+      <button class="btn big" id="altR" type="button">Right <kbd>D</kbd></button>
+    </div>
     <div class="seq" id="gameSeq"></div>
     <div class="palette" id="palette"></div>
     <div class="game-actions">
@@ -464,6 +579,32 @@ body[data-mode="focus"] #carry { display: none; }
     </div>
   </div>
 
+  <div class="overlay" id="summary" hidden>
+    <div class="card-big summary-card" role="dialog" aria-modal="true" aria-labelledby="sumDay">
+      <p class="eyebrow">Closing time</p>
+      <h2 id="sumDay">Day 1 done!</h2>
+      <p class="lede" id="sumLede"></p>
+      <ul class="sum-stats" id="sumStats"></ul>
+      <div id="sumExtra"></div>
+      <button class="btn primary big" id="toMarket" type="button">Visit the morning market</button>
+    </div>
+  </div>
+
+  <div class="modal" id="market" hidden>
+    <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="marketDay">
+      <div class="sheet-head">
+        <div>
+          <h2 id="marketDay">Morning Market</h2>
+          <p>Restock the pantry, upgrade the kitchen and make the shop cozier. Every ingredient you grab uses one from the shelf.</p>
+        </div>
+        <div class="pill market-coins"><span class="coin-ico" aria-hidden="true"></span><b id="marketCoins">0</b></div>
+      </div>
+      <div class="tabs market-tabs"><div class="tabs-row" id="marketTabs"></div><button class="btn small" id="fillAll" type="button">Restock everything</button></div>
+      <div class="grid market" id="marketGrid"></div>
+      <div class="sheet-foot"><button class="btn primary big" id="openDay" type="button">Open the shop</button></div>
+    </div>
+  </div>
+
   <div class="overlay" id="pause" hidden>
     <div class="card-big">
       <p class="eyebrow">Paused</p>
@@ -475,6 +616,7 @@ body[data-mode="focus"] #carry { display: none; }
         <li><kbd>1</kbd>–<kbd>4</kbd> tickets</li>
         <li><kbd>R</kbd> recipes</li>
         <li><kbd>Q</kbd> step back</li>
+        <li><kbd>B</kbd> market (mornings)</li>
       </ul>
     </div>
   </div>

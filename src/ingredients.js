@@ -449,8 +449,49 @@ function scatter(top, n, cols, rows, build, jitter = 0.01) {
   }
 }
 
+// Real fruit silhouettes as lathe profiles (x = radius, y = height, in units of r).
+const PROFILE = {
+  apple: [[0.0005, 0.14], [0.35, 0.03], [0.75, 0.1], [0.98, 0.42], [1.0, 0.78], [0.86, 1.12], [0.6, 1.32], [0.3, 1.3], [0.12, 1.2], [0.0005, 1.12]],
+  peach: [[0.0005, 0.02], [0.5, 0.06], [0.88, 0.32], [1.0, 0.72], [0.9, 1.15], [0.6, 1.42], [0.25, 1.52], [0.0005, 1.56]],
+  lemon: [[0.0005, 0], [0.12, 0.06], [0.35, 0.2], [0.72, 0.5], [0.8, 0.9], [0.72, 1.3], [0.35, 1.6], [0.12, 1.74], [0.0005, 1.8]],
+  egg: [[0.0005, 0], [0.5, 0.04], [0.86, 0.3], [0.98, 0.7], [0.9, 1.12], [0.64, 1.45], [0.3, 1.62], [0.0005, 1.66]],
+  cherry: [[0.0005, 0.04], [0.55, 0.02], [0.92, 0.3], [1.0, 0.7], [0.8, 1.2], [0.42, 1.44], [0.12, 1.38], [0.0005, 1.3]],
+};
+const profileGeo = (name, r, seg = 24) => G.lathe(PROFILE[name].map(([x, y]) => new THREE.Vector2(x * r, y * r)), seg);
+
 function fruit(r, col, o = {}) {
   const g = new THREE.Group();
+  if (o.shape) {
+    const body = mk(profileGeo(o.shape, r), col, { outline: o.outline || 'thin' });
+    body.scale.set(o.sx || 1, o.sy || 1, o.sz || 1);
+    if (o.shape === 'lemon') {
+      // lemons and limes lie on their side
+      body.rotation.z = Math.PI / 2;
+      body.position.set(0.9 * r * (o.sy || 1), r * 0.78, 0);
+    }
+    g.add(body);
+    const topY = o.shape === 'lemon' ? r * 1.5 : PROFILE[o.shape][PROFILE[o.shape].length - 1][1] * r * (o.sy || 1);
+    if (o.stem) {
+      const st = mk(G.capsule(0.006, r * 0.6), '#8A5A3B', { outline: false });
+      st.position.set(0, topY + r * 0.25, 0);
+      st.rotation.z = 0.3;
+      g.add(st);
+    }
+    if (o.leaf) {
+      const lf = mk(G.sphere(r * 0.4, 10, 6), C.sageDark, { outline: 'thin' });
+      lf.scale.set(1.4, 0.3, 0.7);
+      lf.position.set(r * 0.38, topY + r * 0.2, 0);
+      lf.rotation.z = 0.35;
+      g.add(lf);
+    }
+    if (o.blush) {
+      const b = mk(G.sphere(r * 0.5, 10, 8), o.blush, { outline: false });
+      b.scale.set(0.35, 0.8, 0.8);
+      b.position.set(r * 0.86, r * 0.75, 0.02 * r);
+      g.add(b);
+    }
+    return g;
+  }
   const s = mk(G.sphere(r, 14, 10), col, { outline: o.outline || 'thin' });
   s.scale.set(o.sx || 1, o.sy || 1, o.sz || 1);
   s.position.y = r * (o.sy || 1) * 0.9;
@@ -486,13 +527,89 @@ function bottle3d(col, cap, band) {
   return g;
 }
 
+function bananaMesh() {
+  // a curved, tapered tube with a brown tip
+  const pts = [];
+  for (let i = 0; i <= 10; i++) {
+    const a = -0.6 + (i / 10) * 1.2;
+    pts.push(new THREE.Vector3(Math.sin(a) * 0.12, (1 - Math.cos(a)) * 0.12, 0));
+  }
+  const tube = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 24, 0.024, 10);
+  const p = tube.attributes.position;
+  const uv = tube.attributes.uv;
+  for (let i = 0; i < p.count; i++) {
+    const u = uv.getX(i);
+    const k = 0.45 + 0.55 * Math.sin(Math.min(1, u * 1.15) * Math.PI) ** 0.5;
+    const cx = Math.sin(-0.6 + u * 1.2) * 0.12, cy = (1 - Math.cos(-0.6 + u * 1.2)) * 0.12;
+    p.setXYZ(i, cx + (p.getX(i) - cx) * k, cy + (p.getY(i) - cy) * k, p.getZ(i) * k);
+  }
+  tube.computeVertexNormals();
+  const g = new THREE.Group();
+  g.add(mk(tube, '#FFE27A', small));
+  const tip = mk(G.sphere(0.01, 8, 6), '#6E4A3A', { outline: false });
+  tip.position.set(Math.sin(0.6) * 0.12, (1 - Math.cos(0.6)) * 0.12, 0);
+  g.add(tip);
+  return g;
+}
+
+let pumpkinG = null;
+function pumpkinGeo() {
+  if (pumpkinG) return pumpkinG;
+  const pts = [[0.0005, 0.012], [0.05, 0], [0.085, 0.025], [0.098, 0.055], [0.09, 0.085], [0.06, 0.105], [0.02, 0.1], [0.0005, 0.092]].map(([x, y]) => new THREE.Vector2(x, y));
+  const g = new THREE.LatheGeometry(pts, 64);
+  const p = g.attributes.position;
+  for (let i = 0; i < p.count; i++) {
+    const x = p.getX(i), z = p.getZ(i);
+    const k = 1 - 0.1 * Math.abs(Math.sin(4 * Math.atan2(z, x)));
+    p.setX(i, x * k);
+    p.setZ(i, z * k);
+  }
+  g.computeVertexNormals();
+  pumpkinG = g;
+  return g;
+}
+
+let carrotG = null;
+function carrotGeo() {
+  if (carrotG) return carrotG;
+  const pts = [[0.0005, -0.085], [0.006, -0.08], [0.016, -0.03], [0.024, 0.03], [0.028, 0.07], [0.024, 0.082], [0.0005, 0.085]].map(([x, y]) => new THREE.Vector2(x, y));
+  const g = new THREE.LatheGeometry(pts, 20);
+  const p = g.attributes.position;
+  for (let i = 0; i < p.count; i++) {
+    // soft growth rings along the root
+    const k = 1 + 0.07 * Math.sin(p.getY(i) * 160);
+    p.setX(i, p.getX(i) * k);
+    p.setZ(i, p.getZ(i) * k);
+  }
+  g.computeVertexNormals();
+  carrotG = g;
+  return g;
+}
+
 function strawberry3d() {
   const g = new THREE.Group();
-  const pts = [[0.0005, 0], [0.012, 0.004], [0.026, 0.02], [0.032, 0.036], [0.028, 0.048], [0.001, 0.052]].map(([x, y]) => new THREE.Vector2(x, y));
-  const b = mk(G.lathe(pts, 12), '#E4605E', small);
+  const pts = [[0.0005, 0], [0.008, 0.003], [0.02, 0.014], [0.03, 0.03], [0.033, 0.042], [0.026, 0.051], [0.001, 0.054]].map(([x, y]) => new THREE.Vector2(x, y));
+  const b = mk(G.lathe(pts, 14), '#E4605E', small);
   g.add(b);
-  const cap = mk(G.cyl(0.024, 0.02, 0.01, 0.004, 8), C.sageDark, { outline: false });
-  cap.position.y = 0.052;
+  // little golden seeds dotted over the berry
+  for (let i = 0; i < 12; i++) {
+    const t = 0.15 + (i % 4) * 0.2, a = i * 2.4;
+    const rr = [0.008, 0.02, 0.03, 0.033][i % 4] * 0.98;
+    const seed = mk(G.sphere(0.0028, 5, 4), '#FFE08A', { outline: false, cast: false });
+    seed.position.set(Math.cos(a) * rr, t * 0.054, Math.sin(a) * rr);
+    g.add(seed);
+  }
+  // a star of sepals on top
+  for (let i = 0; i < 5; i++) {
+    const a = (i / 5) * Math.PI * 2;
+    const sep = mk(G.sphere(0.012, 8, 6), C.sageDark, { outline: 'thin', cast: false });
+    sep.scale.set(1.5, 0.3, 0.6);
+    sep.position.set(Math.cos(a) * 0.012, 0.055, Math.sin(a) * 0.012);
+    sep.rotation.y = -a;
+    g.add(sep);
+  }
+  const cap = mk(G.capsule(0.003, 0.012), C.sageDark, { outline: false });
+  cap.position.y = 0.064;
   g.add(cap);
   g.rotation.x = Math.PI / 2 - 0.4;
   g.position.y = 0.025;
@@ -588,38 +705,41 @@ const MODEL = {
     add(g, label('jar-pb', 0.18), 0, 0.1, 0.112);
     return g;
   },
-  apples: () => crate3d((top) => scatter(top, 6, 3, 2, () => fruit(0.055, '#E4605E', { stem: true, leaf: true }))),
-  peaches: () => crate3d((top) => scatter(top, 6, 3, 2, () => fruit(0.055, '#F6A57A', { leaf: true }))),
+  apples: () => crate3d((top) => scatter(top, 6, 3, 2, () => fruit(0.045, '#E4605E', { shape: 'apple', stem: true, leaf: true, blush: '#F08A7E' }))),
+  peaches: () => crate3d((top) => scatter(top, 6, 3, 2, () => fruit(0.042, '#F6A57A', { shape: 'peach', leaf: true, blush: '#F3876A' }))),
   bananas: () => crate3d((top) => {
-    for (const [x, rz] of [[-0.08, 0.2], [0.09, -0.2]]) {
+    for (const [x, ry] of [[-0.08, 0.6], [0.09, -0.6]]) {
       const bunch = new THREE.Group();
-      bunch.position.set(x, 0.04, 0);
-      bunch.rotation.y = rz * 3;
+      bunch.position.set(x, 0.035, 0);
+      bunch.rotation.y = ry;
       top.add(bunch);
       for (let i = 0; i < 3; i++) {
-        const b = mk(G.capsule(0.025, 0.16), '#FFE27A', small);
-        b.rotation.set(Math.PI / 2, 0, 0.35 - i * 0.35);
-        b.position.set((i - 1) * 0.035, 0, 0);
+        const b = bananaMesh();
+        b.position.set(0, i * 0.012, (i - 1) * 0.034);
+        b.rotation.x = (i - 1) * 0.15;
         bunch.add(b);
       }
+      const stem = mk(G.cyl(0.012, 0.014, 0.04, 0.004, 8), '#9DB85A', small);
+      stem.rotation.z = Math.PI / 2;
+      stem.position.set(-0.1, 0.03, 0);
+      bunch.add(stem);
     }
   }),
   pumpkin: () => crate3d((top) => {
-    for (const x of [-0.09, 0.1]) {
+    for (const [x, s] of [[-0.09, 1], [0.1, 0.85]]) {
       const p = new THREE.Group();
-      p.position.set(x, 0.06, 0);
+      p.position.set(x, 0.0, 0);
+      p.scale.setScalar(s);
       top.add(p);
-      for (let i = 0; i < 5; i++) {
-        const a = (i / 5) * Math.PI * 2;
-        const lobe = mk(G.sphere(0.06, 12, 10), '#E8893A', small);
-        lobe.scale.set(0.7, 0.9, 1);
-        lobe.position.set(Math.cos(a) * 0.03, 0, Math.sin(a) * 0.03);
-        lobe.rotation.y = -a;
-        p.add(lobe);
-      }
-      const st = mk(G.cyl(0.012, 0.016, 0.05, 0.005, 8), C.sageDark, { outline: false });
-      st.position.y = 0.07;
+      add(p, mk(pumpkinGeo(), '#E8893A', small), 0, 0, 0);
+      const st = mk(G.cyl(0.01, 0.016, 0.05, 0.005, 8), '#8A7A3A', { outline: 'thin' });
+      st.position.set(0.004, 0.105, 0);
+      st.rotation.z = -0.25;
       p.add(st);
+      const lf = mk(G.sphere(0.025, 10, 6), C.sageDark, { outline: 'thin' });
+      lf.scale.set(1.3, 0.3, 0.8);
+      lf.position.set(-0.03, 0.098, 0.01);
+      p.add(lf);
     }
   }),
   'sweet-potato': () => crate3d((top) => scatter(top, 4, 2, 2, () => {
@@ -648,14 +768,16 @@ const MODEL = {
   }),
   carrots: () => crate3d((top) => scatter(top, 6, 3, 2, () => {
     const g = new THREE.Group();
-    const cone = mk(G.cyl(0.028, 0.004, 0.16, 0.008, 10), '#F4A646', small);
+    const cone = mk(carrotGeo(), '#F4A646', small);
     cone.rotation.z = Math.PI / 2;
-    cone.position.y = 0.03;
+    cone.position.set(0.02, 0.028, 0);
     g.add(cone);
-    const tops = mk(G.sphere(0.022, 8, 6), C.sageDark, { outline: false });
-    tops.scale.set(1.6, 0.8, 1);
-    tops.position.set(0.1, 0.035, 0);
-    g.add(tops);
+    for (let i = -1; i <= 1; i++) {
+      const fr = mk(G.capsule(0.007, 0.05), i ? C.sage : C.sageDark, { outline: 'thin' });
+      fr.rotation.z = -Math.PI / 2 + i * 0.4;
+      fr.position.set(0.12, 0.03 + i * 0.008, i * 0.006);
+      g.add(fr);
+    }
     return g;
   }, 0.015)),
 
@@ -691,8 +813,7 @@ const MODEL = {
     const g = new THREE.Group();
     add(g, mk(G.box(0.32, 0.06, 0.18, 0.02), '#E6CC9C', { outline: 'mid' }), 0, 0.03, 0);
     for (let i = 0; i < 6; i++) {
-      const e = add(g, mk(G.sphere(0.034, 12, 10), '#FFF6E4', small), -0.1 + (i % 3) * 0.1, 0.085, i < 3 ? -0.04 : 0.04);
-      e.scale.y = 1.25;
+      add(g, mk(profileGeo('egg', 0.033), i % 2 ? '#FFF6E4' : '#F3D9B4', small), -0.1 + (i % 3) * 0.1, 0.045, i < 3 ? -0.04 : 0.04);
     }
     return g;
   },
@@ -736,7 +857,7 @@ const MODEL = {
     const g = bowl3d(C.pink, 0.13);
     for (let i = 0; i < 8; i++) {
       const a = (i / 8) * Math.PI * 2;
-      add(g, fruit(0.025, '#D8404E', { stem: true, outline: 'thin' }), Math.cos(a) * 0.06, 0.06, Math.sin(a) * 0.05);
+      add(g, fruit(0.022, '#D8404E', { shape: 'cherry', stem: true, outline: 'thin' }), Math.cos(a) * 0.06, 0.06, Math.sin(a) * 0.05);
     }
     return g;
   },
@@ -744,7 +865,8 @@ const MODEL = {
     const g = bowl3d(C.blue, 0.14);
     for (let i = 0; i < 5; i++) {
       const a = (i / 5) * Math.PI * 2;
-      add(g, fruit(0.035, '#FFE066', { sx: 1.3, outline: 'thin' }), Math.cos(a) * 0.055, 0.05, Math.sin(a) * 0.045);
+      const l = add(g, fruit(0.03, '#FFE066', { shape: 'lemon', outline: 'thin' }), Math.cos(a) * 0.05, 0.055, Math.sin(a) * 0.045);
+      l.rotation.y = a;
     }
     return g;
   },
@@ -752,7 +874,8 @@ const MODEL = {
     const g = bowl3d(C.butter, 0.14);
     for (let i = 0; i < 5; i++) {
       const a = (i / 5) * Math.PI * 2;
-      add(g, fruit(0.033, '#9DC25A', { outline: 'thin' }), Math.cos(a) * 0.055, 0.05, Math.sin(a) * 0.045);
+      const l = add(g, fruit(0.032, '#9DC25A', { shape: 'lemon', sy: 0.8, outline: 'thin' }), Math.cos(a) * 0.05, 0.055, Math.sin(a) * 0.045);
+      l.rotation.y = a;
     }
     return g;
   },
@@ -760,6 +883,122 @@ const MODEL = {
 
 export function ingredientModel(id) {
   return MODEL[id]();
+}
+
+/** One or two of an ingredient, for the cutting board while you prep it. */
+const PREP = {
+  apples: () => fruit(0.045, '#E4605E', { shape: 'apple', stem: true, leaf: true, blush: '#F08A7E' }),
+  peaches: () => {
+    const g = new THREE.Group();
+    add(g, fruit(0.042, '#F6A57A', { shape: 'peach', leaf: true, blush: '#F3876A' }), -0.03, 0, 0);
+    add(g, fruit(0.038, '#F6A57A', { shape: 'peach', blush: '#F3876A' }), 0.05, 0, 0.02);
+    return g;
+  },
+  bananas: () => {
+    const g = new THREE.Group();
+    for (let i = 0; i < 2; i++) add(g, bananaMesh(), -0.04, i * 0.012, (i - 0.5) * 0.04).rotation.x = (i - 0.5) * 0.2;
+    return g;
+  },
+  strawberries: () => {
+    const g = new THREE.Group();
+    for (const [x, z, r] of [[-0.03, 0, 0], [0.03, 0.02, 1.4], [0.0, -0.035, 2.6]]) {
+      const s = strawberry3d();
+      s.position.x = x;
+      s.position.z = z;
+      s.rotation.z = r;
+      g.add(s);
+    }
+    return g;
+  },
+  pineapple: () => {
+    const g = new THREE.Group();
+    const body = add(g, mk(G.sphere(0.07, 16, 12), '#F2B84A', { outline: 'mid' }), 0, 0.09, 0);
+    body.scale.set(1, 1.3, 1);
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * Math.PI * 2;
+      const leaf = mk(G.cyl(0.001, 0.022, 0.12, 0.008, 6), C.sageDark, small);
+      leaf.position.set(Math.cos(a) * 0.02, 0.23, Math.sin(a) * 0.02);
+      leaf.rotation.set(Math.sin(a) * 0.45, 0, -Math.cos(a) * 0.45);
+      g.add(leaf);
+    }
+    return g;
+  },
+  cherries: () => {
+    const g = new THREE.Group();
+    for (let i = 0; i < 5; i++) add(g, fruit(0.02, '#D8404E', { shape: 'cherry', stem: true }), Math.cos(i * 1.3) * 0.04, 0, Math.sin(i * 1.3) * 0.03);
+    return g;
+  },
+  carrots: () => {
+    const g = new THREE.Group();
+    for (const z of [-0.025, 0.025]) {
+      const c = add(g, mk(carrotGeo(), '#F4A646', small), 0, 0.028, z);
+      c.rotation.z = Math.PI / 2;
+      for (let i = -1; i <= 1; i++) {
+        const fr = add(g, mk(G.capsule(0.007, 0.05), i ? C.sage : C.sageDark, small), -0.11, 0.03 + i * 0.008, z + i * 0.006);
+        fr.rotation.z = Math.PI / 2 + i * 0.4;
+      }
+    }
+    return g;
+  },
+  'sweet-potato': () => {
+    const g = new THREE.Group();
+    for (const [z, r] of [[-0.03, 0.4], [0.03, -0.3]]) {
+      const s = add(g, mk(G.capsule(0.032, 0.09), '#C8764A', small), 0, 0.032, z);
+      s.rotation.set(Math.PI / 2, 0, r);
+      s.scale.set(1, 1, 0.85);
+    }
+    return g;
+  },
+  pumpkin: () => {
+    const g = new THREE.Group();
+    add(g, mk(pumpkinGeo(), '#E8893A', small));
+    const st = add(g, mk(G.cyl(0.01, 0.016, 0.05, 0.005, 8), '#8A7A3A', small), 0.004, 0.105, 0);
+    st.rotation.z = -0.25;
+    return g;
+  },
+  lemons: () => {
+    const g = new THREE.Group();
+    add(g, fruit(0.034, '#FFE066', { shape: 'lemon' }), -0.04, 0, 0);
+    add(g, fruit(0.03, '#FFE066', { shape: 'lemon' }), 0.03, 0, 0.03).rotation.y = 0.8;
+    return g;
+  },
+  limes: () => {
+    const g = new THREE.Group();
+    add(g, fruit(0.034, '#9DC25A', { shape: 'lemon', sy: 0.8 }), -0.035, 0, 0);
+    add(g, fruit(0.032, '#9DC25A', { shape: 'lemon', sy: 0.8 }), 0.035, 0, 0.02).rotation.y = 1;
+    return g;
+  },
+  eggs: () => {
+    const g = new THREE.Group();
+    add(g, mk(profileGeo('egg', 0.034), '#FFF6E4', small), -0.03, 0, 0);
+    const e = add(g, mk(profileGeo('egg', 0.034), '#F3D9B4', small), 0.035, 0.02, 0.01);
+    e.rotation.z = -1.3;
+    return g;
+  },
+  chocolate: () => {
+    const g = new THREE.Group();
+    add(g, mk(G.box(0.2, 0.022, 0.1, 0.008), '#5A3422', { outline: 'mid' }), 0, 0.011, 0);
+    for (let i = 0; i < 4; i++) for (let j = 0; j < 2; j++) add(g, mk(G.box(0.042, 0.012, 0.04, 0.006), '#6A4029', { outline: false }), -0.072 + i * 0.048, 0.026, -0.023 + j * 0.046);
+    return g;
+  },
+  nuts: () => {
+    const g = new THREE.Group();
+    for (let i = 0; i < 9; i++) {
+      const n = add(g, mk(G.sphere(0.022, 10, 8), '#95512A', small), Math.cos(i * 2.2) * 0.05 * Math.sqrt(i / 9), 0.01 + (i % 3) * 0.006, Math.sin(i * 2.2) * 0.05 * Math.sqrt(i / 9));
+      n.scale.set(1.4, 0.5, 0.8);
+      n.rotation.y = i;
+    }
+    return g;
+  },
+  bread: () => {
+    const g = new THREE.Group();
+    const loaf = add(g, mk(G.box(0.2, 0.09, 0.11, 0.04), '#E9A95A', { outline: 'mid' }), 0, 0.045, 0);
+    for (const x of [-0.05, 0, 0.05]) add(loaf, mk(G.box(0.012, 0.01, 0.08, 0.004), '#F6D49A', { outline: false }), x, 0.045, 0).rotation.y = 0.5;
+    return g;
+  },
+};
+export function prepModel(id) {
+  return (PREP[id] || MODEL[id])();
 }
 
 /** tiny bits dropped into the mixing bowl */

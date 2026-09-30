@@ -3,7 +3,7 @@
 // baker's eyes (front walls, ceiling, pendants, front-wall furniture, the
 // hillside outside) live on layer 1, so the title diorama stays a cutaway.
 import * as THREE from 'three';
-import { G, C, INK, mk, toon, glow, blob, worldUV } from './toon.js';
+import { G, C, INK, mk, toon, glow, blob, worldUV, canvasTex } from './toon.js';
 import {
   planksTex, wallpaperTex, wainscotTex, stripesTex, ginghamTex, weaveTex, signTex, menuTex, skyTex, hillsideTex,
   scallopAwning, plant, basket, jar, counter, chair, cafeTable, sconce, pendant, frame, catPortrait, cakePoster,
@@ -707,7 +707,16 @@ export function buildWorld(scene) {
     mp[i * 3 + 2] = -2 + Math.random() * 6.5;
   }
   moteGeo.setAttribute('position', new THREE.BufferAttribute(mp, 3));
-  const motes = new THREE.Points(moteGeo, new THREE.PointsMaterial({ color: '#FFF1C8', size: 0.028, transparent: true, opacity: 0.4, depthWrite: false, blending: THREE.AdditiveBlending }));
+  // soft round dots (plain points render as squares when they drift close to the eye)
+  const dot = canvasTex(32, 32, (c) => {
+    const gr = c.createRadialGradient(16, 16, 0, 16, 16, 16);
+    gr.addColorStop(0, 'rgba(255,255,255,1)');
+    gr.addColorStop(0.5, 'rgba(255,255,255,.5)');
+    gr.addColorStop(1, 'rgba(255,255,255,0)');
+    c.fillStyle = gr;
+    c.fillRect(0, 0, 32, 32);
+  });
+  const motes = new THREE.Points(moteGeo, new THREE.PointsMaterial({ color: '#FFF1C8', map: dot, size: 0.03, transparent: true, opacity: 0.45, depthWrite: false, blending: THREE.AdditiveBlending }));
   fp.add(motes);
 
   // --- colliders for kitchen furniture
