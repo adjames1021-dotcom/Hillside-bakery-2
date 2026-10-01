@@ -181,7 +181,7 @@ function cookieGeo(r, h, seed) {
 }
 
 // Over-under pastry strips for a real woven lattice; each strip is its own piece.
-function lattice(g, R, top, col, count = 4, w = 0.011) {
+function lattice(g, R, top, col, count = 4, w = 0.011, shine = null) {
   const gap = 0.05;
   const offs = Array.from({ length: count }, (_, i) => (i - (count - 1) / 2) * gap);
   const amp = 0.0045;
@@ -195,9 +195,19 @@ function lattice(g, R, top, col, count = 4, w = 0.011) {
         const wave = amp * Math.cos((Math.PI * (u - offs[0])) / gap + i * Math.PI) * (dir ? -1 : 1);
         pts.push(dir ? new THREE.Vector3(off, wave / 0.45, u) : new THREE.Vector3(u, wave / 0.45, off));
       }
-      const tg = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 48, w, 8);
+      const curve = new THREE.CatmullRomCurve3(pts);
+      const tg = new THREE.TubeGeometry(curve, 48, w, 8);
       tg.scale(1, 0.45, 1);
-      strips.push(add(g, part(tg, col, 'thin'), 0, top + 0.006, 0));
+      const strip = add(g, part(tg, col, 'thin'), 0, top + 0.006, 0);
+      if (shine) {
+        // a thin glossy line of egg wash along the top of the strip
+        const sg = new THREE.TubeGeometry(curve, 48, w * 0.28, 6);
+        sg.scale(1, 0.45, 1);
+        sg.translate(0, w * 0.4, 0);
+        const sh = add(strip, part(sg, shine, false));
+        sh.userData.noHighlight = true;
+      }
+      strips.push(strip);
     });
   }
   // weave order: alternate directions so each tap lays the next strip
@@ -381,31 +391,101 @@ function stripeMat(col, n = 10) {
 
 const T = {};
 
+// Pie helpers: a baked crust browns on its high points and catches an egg-wash
+// shine; fruit fillings show their fruit and bubble up through the gaps.
+const browned = (col) => mixHex(col, '#9A5524', 0.32);
+const glossOf = (col) => mixHex(col, '#FFF8E8', 0.55);
+
+// glossy streaks: flat, light, unoutlined dabs that read as a shine
+function shineDabs(g, col, pts, len = 0.016, r = 0.0026) {
+  for (const [x, y, z, a] of pts) {
+    const s = add(g, part(G.capsule(r, len), col, false), x, y, z);
+    s.rotation.set(Math.PI / 2, 0, a);
+    s.scale.y = 1;
+    s.userData.noHighlight = true;
+  }
+}
+
+// a curved highlight across a glossy filling
+function fillShine(g, col, y, r = 0.075, a0 = 2.3) {
+  const arc = add(g, part(G.torus(r, 0.0032, 1.1, 20), col, false), 0, y, 0);
+  arc.rotation.set(Math.PI / 2, 0, a0);
+  arc.scale.z = 0.35;
+  arc.userData.noHighlight = true;
+  const dot = add(g, part(G.sphere(0.0045, 8, 6), col, false), Math.cos(-a0 - 1.35) * r * 0.82, y + 0.001, Math.sin(-a0 - 1.35) * r * 0.82);
+  dot.scale.y = 0.3;
+}
+
+// an apple slice: a pale crescent with a thin red skin edge
+function appleSlice(g, x, y, z, ry, P) {
+  const s = add(g, new THREE.Group(), x, y, z);
+  s.rotation.set(0.15, ry, 0.1);
+  const flesh = add(s, part(G.torus(0.017, 0.0065, Math.PI * 0.95, 12), P('#F6D98A'), 'thin'));
+  flesh.rotation.x = Math.PI / 2;
+  flesh.scale.z = 0.55;
+  const skin = add(s, part(G.torus(0.0225, 0.0022, Math.PI * 0.95, 12), P('#D8564A'), false));
+  skin.rotation.x = Math.PI / 2;
+  return s;
+}
+
+// a pecan half: two ridged lobes with a groove down the middle
+function pecanHalf(g, x, y, z, ry, P) {
+  const n = add(g, new THREE.Group(), x, y, z);
+  n.rotation.y = ry;
+  for (const sx of [-1, 1]) {
+    const lobe = add(n, part(G.sphere(0.0115, 14, 10), P('#8B4A22'), 'thin'), sx * 0.0075, 0, 0);
+    lobe.scale.set(0.75, 0.55, 1.6);
+    for (const k of [-1, 0, 1]) {
+      const ridge = add(n, part(G.capsule(0.0018, 0.006), P('#6A3416'), false), sx * 0.0075, 0.0058, k * 0.009);
+      ridge.rotation.set(0, 0, Math.PI / 2);
+    }
+  }
+  return n;
+}
+
 T.pie = (g, p, c) => {
   const { P, rand } = c;
+  const baked = !c.raw;
   const crust = p.crust || '#E9A95A';
+  const rimCol = p.edge || crust;
   plate(g, 0.19);
   const top = 0.067;
   c.F(g, 'crust', (f) => {
     add(f, part(fluted(G.cyl(0.155, 0.125, 0.05, 0.016, 72), 24, 0.028, 'pietin'), P(crust)), 0, 0.037, 0);
     // the edge: pinched once its crimp step is done (crimping happens arc by arc)
-    const rimC = P(p.edge || crust);
     if (c.done('crimp')) {
-      const rim = add(f, part(crimpGeo(0.138, 0.02, 18), rimC), 0, 0.066, 0);
+      const rim = add(f, part(crimpGeo(0.138, 0.02, 18), P(rimCol)), 0, 0.066, 0);
       rim.rotation.x = Math.PI / 2;
+      if (baked) {
+        // every pinched peak toasts a shade darker, with a dab of egg-wash shine
+        for (let i = 0; i < 18; i++) {
+          const a = (i / 18) * TAU;
+          const pk = add(f, part(G.sphere(0.0125, 10, 8), P(browned(rimCol)), false), Math.cos(a) * 0.14, 0.0835, Math.sin(a) * 0.14);
+          pk.scale.set(1.1, 0.45, 1.1);
+        }
+        shineDabs(f, glossOf(rimCol), Array.from({ length: 6 }, (_, i) => {
+          const a = (i / 6) * TAU + 0.4;
+          return [Math.cos(a) * 0.128, 0.0865, Math.sin(a) * 0.128, a + Math.PI / 2];
+        }), 0.012, 0.0022);
+      }
     } else {
-      const rim = add(f, part(G.torus(0.138, 0.0185, TAU, 48), rimC), 0, 0.066, 0);
+      const rim = add(f, part(G.torus(0.138, 0.0185, TAU, 48), P(rimCol)), 0, 0.066, 0);
       rim.rotation.x = Math.PI / 2;
+      if (baked) {
+        const band = add(f, part(G.torus(0.138, 0.0085, TAU, 48), P(browned(rimCol)), false), 0, 0.078, 0);
+        band.rotation.x = Math.PI / 2;
+      }
     }
   }, 'grow');
   c.F(g, 'crimp', (f) => {
     if (!c.isLive('crimp')) return;
     // live: five pinched arcs replace the smooth edge one tap at a time
     for (let i = 0; i < 5; i++) {
-      const arc = add(f, part(crimpGeo(0.138, 0.0205, 18, 0.28, TAU / 5 + 0.02), P(p.edge || crust)), 0, 0.0665, 0);
+      const arc = add(f, part(crimpGeo(0.138, 0.0205, 18, 0.28, TAU / 5 + 0.02), P(rimCol)), 0, 0.0665, 0);
       arc.rotation.set(Math.PI / 2, 0, (i / 5) * TAU);
     }
   }, 'pieces');
+  const covered = p.topCrust || p.layered || (p.top === 'mound' && c.has('whipped'));
   if (p.layered) {
     // banana cream: bananas, custard, bananas, laid by the layering game
     c.F(g, 'layers', (f) => {
@@ -426,55 +506,105 @@ T.pie = (g, p, c) => {
   } else {
     c.F(g, 'fill', (f) => {
       add(f, part(G.lathe([V(0.0005, 0), V(0.128, 0), V(0.124, 0.006), V(0.1, 0.011), V(0.05, 0.015), V(0.0005, 0.016)], 48), P(p.fill), false), 0, 0.054, 0);
-      if (p.bits) {
-        for (let i = 0; i < 12; i++) {
-          const a = rand() * TAU, d = Math.sqrt(rand()) * 0.1;
-          const b = add(f, part(lumpyGeo(0.012, i + 11, 1), P(p.bits), false), Math.cos(a) * d, top - 0.002, Math.sin(a) * d);
-          b.scale.y = 0.6;
+      if (p.fruit === 'apple') {
+        // fanned apple slices mounded under the lattice, dusted with cinnamon
+        for (let i = 0; i < 16; i++) {
+          const a = i * 2.39996, d = Math.sqrt((i + 0.5) / 16) * 0.105;
+          appleSlice(f, Math.cos(a) * d, top - 0.001 + (1 - d / 0.11) * 0.004, Math.sin(a) * d, a + 1.2, P);
+        }
+        dotsOn(f, rand, 26, 0, top + 0.004, 0, 0.1, 0.1, P('#A8612E'), 0.0022);
+      }
+      if (p.fruit === 'cherry') {
+        for (let i = 0; i < 18; i++) {
+          const a = i * 2.39996, d = Math.sqrt((i + 0.5) / 18) * 0.108;
+          const ch = add(f, part(G.sphere(0.0115, 14, 10), P('#B5263A'), 'thin'), Math.cos(a) * d, top - 0.002 + (1 - d / 0.11) * 0.004, Math.sin(a) * d);
+          ch.scale.y = 0.8;
+          const hl = add(ch, part(G.sphere(0.0035, 6, 4), '#F59AA0', false), -0.004, 0.007, 0.004);
+          hl.userData.noHighlight = true;
         }
       }
       if (p.pecans) {
-        for (let i = 0; i < 10; i++) {
-          const a = (i / 10) * TAU, r = i < 9 ? 0.085 : 0;
-          const n = add(f, part(G.sphere(0.022, 16, 10), P('#8B4A22'), 'thin'), Math.cos(a) * r, top + 0.003, Math.sin(a) * r);
-          n.scale.set(1.4, 0.45, 0.8);
-          n.rotation.y = -a;
-          add(n, part(G.box(0.03, 0.01, 0.003, 0.0015), P('#5E2E14'), false), 0, 0.012, 0);
-        }
+        // concentric rings of glossy pecan halves set in caramel
         add(f, part(G.sphere(0.06, 24, 12), P('#C9783A'), false), 0, top - 0.024, 0).scale.y = 0.35;
+        for (let i = 0; i < 14; i++) pecanHalf(f, Math.cos((i / 14) * TAU) * 0.1, top + 0.002, Math.sin((i / 14) * TAU) * 0.1, -(i / 14) * TAU, P);
+        for (let i = 0; i < 8; i++) pecanHalf(f, Math.cos((i / 8) * TAU + 0.3) * 0.058, top + 0.006, Math.sin((i / 8) * TAU + 0.3) * 0.058, -(i / 8) * TAU - 0.3, P);
+        pecanHalf(f, 0, top + 0.01, 0, 0.6, P);
+      }
+      if (p.specks) dotsOn(f, rand, 34, 0, top - 0.0005, 0, 0.11, 0.11, P(p.specks), 0.0022, (x, z, d) => 0.054 + 0.016 * (1 - d * d * 0.9) + 0.0006);
+      if (p.zest) dotsOn(f, rand, 22, 0, top - 0.0005, 0, 0.1, 0.1, '#8FB34A', 0.0024, (x, z, d) => 0.054 + 0.016 * (1 - d * d * 0.9) + 0.0006);
+      if (baked && p.smooth) {
+        // custard pies set with a slightly darker ring where the filling meets the crust
+        const ring = add(f, part(G.torus(0.118, 0.006, TAU, 48), P(mixHex(p.fill, '#7A3A1A', 0.25)), false), 0, 0.0605, 0);
+        ring.rotation.x = Math.PI / 2;
+        ring.scale.z = 0.4;
+      }
+      if (!covered && baked) fillShine(f, glossOf(p.fill), p.pecans ? top + 0.009 : 0.0705, p.pecans ? 0.045 : 0.07);
+      // juice bubbling up at the edge and between the fruit
+      if (baked && (p.fruit || p.pecans)) {
+        const juice = P(mixHex(p.fill, '#5A1A12', p.pecans ? 0.2 : 0.28));
+        for (let i = 0; i < 9; i++) {
+          const a = (i / 9) * TAU + rand() * 0.4, d = i % 3 === 0 ? 0.05 : 0.118;
+          const b = add(f, part(G.sphere(0.0065 + rand() * 0.003, 10, 8), juice, false), Math.cos(a) * d, top + 0.001, Math.sin(a) * d);
+          b.scale.y = 0.55;
+        }
       }
     }, 'rise');
   }
   if (p.lattice) {
     c.F(g, 'lattice', (f) => {
-      lattice(f, 0.132, top - 0.002, P(crust));
-      if (p.sugar && c.done('lattice')) dotsOn(f, rand, 30, 0, top + 0.012, 0, 0.11, 0.11, '#FFFBF0', 0.0035);
+      lattice(f, 0.132, top - 0.002, P(crust), 4, 0.012, baked ? glossOf(crust) : null);
+      if (p.sugar && c.done('lattice')) dotsOn(f, rand, 36, 0, top + 0.013, 0, 0.11, 0.11, '#FFFBF0', 0.003);
     }, 'pieces');
   }
   if (p.topCrust) {
     // a double crust that gets star vents cut into it
     const lid = add(g, part(G.lathe([V(0.0005, 0), V(0.13, 0), V(0.13, 0.004), V(0.11, 0.016), V(0.06, 0.028), V(0.0005, 0.03)], 48), P(crust)), 0, 0.058, 0);
     lid.userData.noHighlight = true;
+    if (baked) {
+      // egg-wash shine on the dome, and pastry leaves around the middle vent
+      for (let i = 0; i < 4; i++) {
+        const a = (i / 4) * TAU + 0.7;
+        const leaf = add(g, part(G.sphere(0.016, 12, 8), P(browned(crust)), 'thin'), Math.cos(a) * 0.03, 0.0868, Math.sin(a) * 0.03);
+        leaf.scale.set(1.5, 0.22, 0.6);
+        leaf.rotation.y = -a;
+      }
+      shineDabs(g, glossOf(crust), [[-0.07, 0.083, -0.03, 0.5], [-0.05, 0.085, -0.06, 0.9], [0.075, 0.082, 0.03, 2.2]], 0.02, 0.0028);
+    }
     c.F(g, 'vents', (f) => {
       for (let i = 0; i < 5; i++) {
         const a = (i / 5) * TAU + 0.3, r = i === 4 ? 0 : 0.062;
-        const st = add(f, part(starGeo(0.014), P(p.fill), false), Math.cos(a) * (i === 4 ? 0 : r), 0.0885 - (i === 4 ? 0 : 0.008), Math.sin(a) * (i === 4 ? 0 : r));
+        const x = Math.cos(a) * r, z = Math.sin(a) * r;
+        const y = i === 4 ? 0.0885 : 0.0805;
+        const st = add(f, part(starGeo(0.014), P(p.fill), false), x, y, z);
         st.rotation.y = a;
+        // berries peeking through each vent, glossy juice welling up
+        for (let k = 0; k < 2; k++) add(st, part(G.sphere(0.0048, 8, 6), P('#4E3A8A'), false), (k - 0.5) * 0.007, 0.003, (k - 0.5) * 0.004);
       }
-      add(f, part(G.sphere(0.012, 10, 8), P(p.fill), 'thin'), 0.14, 0.06, 0.03).scale.y = 0.6;
     }, 'pieces');
-    if (p.sugar) dotsOn(g, rand, 24, 0, 0.088, 0, 0.1, 0.1, '#FFFBF0', 0.003);
+    if (p.sugar) dotsOn(g, rand, 30, 0, 0.088, 0, 0.1, 0.1, '#FFFBF0', 0.003, (x, z, d) => 0.058 + 0.03 * (1 - d * d) + 0.0015);
   }
-  if (p.ooze) for (const a of [0.6, 2.2, 4.1]) add(g, part(G.sphere(0.016, 10, 8), P(p.fill), 'thin'), Math.cos(a) * 0.15, 0.058, Math.sin(a) * 0.15);
+  if (p.ooze && baked) {
+    // filling running down over the crimped edge
+    for (const a of [0.6, 2.2, 4.1]) {
+      const drip = add(g, part(G.capsule(0.009, 0.018), P(p.fill), 'thin'), Math.cos(a) * 0.152, 0.06, Math.sin(a) * 0.152);
+      drip.rotation.set(Math.sin(a) * 0.5, 0, -Math.cos(a) * 0.5);
+      add(g, part(G.sphere(0.011, 10, 8), P(p.fill), 'thin'), Math.cos(a) * 0.135, 0.075, Math.sin(a) * 0.135).scale.y = 0.6;
+    }
+  }
   // toppings drawn by the pie itself
   if (p.top === 'rosettes' && c.has('whipped')) {
     for (let i = 0; i < 8; i++) {
       const a = (i / 8) * TAU;
       swirl(g, 0.019, 0.03, '#FFFBF0', Math.cos(a) * 0.1, top, Math.sin(a) * 0.1);
     }
+    // a twisted lime wheel in the middle
     const lime = add(g, part(G.cyl(0.035, 0.035, 0.008, 0.003), '#9DC25A', 'thin'), 0, top + 0.025, 0);
     lime.rotation.x = 1.2;
     add(lime, part(G.cyl(0.03, 0.03, 0.009, 0.002), '#E6F2A8', false));
+    for (let i = 0; i < 8; i++) {
+      const seg = add(lime, part(G.box(0.026, 0.0095, 0.0016, 0.0006), '#C8DE80', false), Math.cos((i / 8) * TAU) * 0.013, 0, Math.sin((i / 8) * TAU) * 0.013);
+      seg.rotation.y = -(i / 8) * TAU;
+    }
   }
   if (p.top === 'dollop' && c.has('whipped')) {
     swirl(g, 0.045, 0.06, '#FFFBF0', 0, top - 0.004, 0);
@@ -515,7 +645,11 @@ T.skillet = (g, p, c) => {
       const a = (i / 6) * TAU + 0.2, r = i === 6 ? 0 : 0.085;
       const b = add(f, part(lumpyGeo(0.036, i + 2, 3, 1.4), P(p.top), 'thin'), Math.cos(a) * r, 0.084, Math.sin(a) * r);
       b.scale.y = 0.6;
-      dotsOn(b, rand, 6, 0, 0.034, 0, 0.022, 0.022, '#FFF3DC', 0.004);
+      if (!c.raw) {
+        const tan = add(b, part(lumpyGeo(0.026, i + 9, 2, 1.2), P(mixHex(p.top, '#A8612E', 0.35)), false), 0, 0.016, 0);
+        tan.scale.y = 0.55;
+      }
+      dotsOn(b, rand, 8, 0, 0.036, 0, 0.022, 0.022, '#FFF3DC', 0.004);
     }
   }, 'pieces');
 };
@@ -1311,14 +1445,14 @@ T.cotton = (g, p, c) => {
 // ------------------------------------------------------------------ menu → model spec
 
 const SPEC = {
-  'apple-pie': ['pie', { fill: '#EDB44E', bits: '#F7DB8C', lattice: true }],
+  'apple-pie': ['pie', { fill: '#EDB44E', fruit: 'apple', lattice: true, sugar: true }],
   'pecan-pie': ['pie', { fill: '#B8652E', pecans: true }],
-  'key-lime-pie': ['pie', { fill: '#DDEBA2', top: 'rosettes', crust: '#DDB27A' }],
-  'pumpkin-pie': ['pie', { fill: '#E8893A', top: 'dollop' }],
-  'cherry-pie': ['pie', { fill: '#C8384A', bits: '#E4605E', lattice: true, sugar: true }],
+  'key-lime-pie': ['pie', { fill: '#DDEBA2', top: 'rosettes', crust: '#DDB27A', zest: true }],
+  'pumpkin-pie': ['pie', { fill: '#E8893A', top: 'dollop', smooth: true, specks: '#9A5524' }],
+  'cherry-pie': ['pie', { fill: '#C8384A', fruit: 'cherry', lattice: true, sugar: true }],
   'banana-cream-pie': ['pie', { fill: '#FFE9A0', top: 'mound', layered: true, shavings: true }],
   'blueberry-pie': ['pie', { fill: '#6F5AA8', topCrust: true, sugar: true, ooze: true }],
-  'sweet-potato-pie': ['pie', { fill: '#D9824A', edge: '#D99550' }],
+  'sweet-potato-pie': ['pie', { fill: '#D9824A', edge: '#D99550', smooth: true, specks: '#8A4A22' }],
   'mud-pie': ['pie', { fill: '#5A3422', crust: '#6E4431', top: 'mound', shavings: true }],
   'peach-cobbler': ['skillet', { fill: '#F6A55A', top: '#EFC06C' }],
   'apple-crisp': ['dish', { dish: '#AFD6EC', fill: '#D9A05B', crumbs: true }],

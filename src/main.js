@@ -1322,7 +1322,8 @@ async function start(hotData = {}) {
         b.turntable.rotation.y += dt * 0.9;
         if (it && it.obj) it.obj.rotation.y = b.turntable.rotation.y;
       }
-      if (st.hero) {
+      // the oven is a heavy appliance: it stays put (its door, glow and steam do the talking)
+      if (st.hero && st.type !== 'bake') {
         st.bounce = Math.max(0, st.bounce - dt * 3);
         const bb = Math.sin(st.bounce * Math.PI) * 0.1;
         const wob = working && st.type !== 'prep' ? Math.sin(S.time * 18) * 0.02 : 0;
@@ -1384,6 +1385,36 @@ async function start(hotData = {}) {
       d.pivot.rotation.y = d.side * 1.6 * d.open;
     }
     updateFlyers(dt);
+    updateCrumbs(dt);
+  }
+
+  // crumbs, chips and sprinkles: tiny bits that fly off a knife or fall from a shaker
+  const crumbs = [];
+  function spawnCrumbs(at, col, n, { spread = 0.3, up = 0.5, floor = at.y - 0.05, size = 1, life = 0.9 } = {}) {
+    for (let i = 0; i < n; i++) {
+      const m = mk(G.sphere(0.0045, 8, 6), col, { outline: false, cast: false });
+      m.scale.set(1.2, 0.7, 1).multiplyScalar(size * (0.7 + Math.random() * 0.6));
+      m.rotation.set(Math.random() * 3, Math.random() * 3, 0);
+      m.position.copy(at).add(V3((Math.random() - 0.5) * 0.02, 0, (Math.random() - 0.5) * 0.02));
+      scene.add(m);
+      crumbs.push({ m, v: V3((Math.random() - 0.5) * spread, up * (0.5 + Math.random()), (Math.random() - 0.5) * spread), floor, t: 0, life, s0: m.scale.clone() });
+    }
+  }
+  function updateCrumbs(dt) {
+    for (let i = crumbs.length - 1; i >= 0; i--) {
+      const c = crumbs[i];
+      c.t += dt;
+      c.v.y -= 2.6 * dt;
+      c.m.position.addScaledVector(c.v, dt);
+      const fl = typeof c.floor === 'function' ? c.floor(c.m.position.x, c.m.position.z) : c.floor;
+      if (c.m.position.y < fl) { c.m.position.y = fl; c.v.multiplyScalar(0); }
+      const k = c.t > c.life * 0.7 ? Math.max(0, 1 - (c.t - c.life * 0.7) / (c.life * 0.3)) : 1;
+      c.m.scale.copy(c.s0).multiplyScalar(Math.max(0.01, k));
+      if (c.t >= c.life) {
+        c.m.removeFromParent();
+        crumbs.splice(i, 1);
+      }
+    }
   }
 
   // little things flying between spots (a prepped pile hopping into the bowl)
@@ -1416,12 +1447,15 @@ async function start(hotData = {}) {
     // while prepping ingredients, frame both the cutting board and the bowl beside it
     if (st.type === 'prep' && F && F.task && F.task.ing && st.sideSlot) target.lerp(st.sideSlot, 0.42);
     if (st.type === 'decor') target.y += 0.1;
-    if (st.type === 'mix') target.y += 0.06;
-    const away = V3(P.x - target.x, 0, P.z - target.z);
-    if (away.lengthSq() < 1e-4) away.set(0, 0, 1);
-    away.normalize();
-    const dist = { mix: 1.0, decor: 0.9, prep: F && F.task && F.task.ing ? 0.95 : 0.8 }[st.type] || 0.85;
-    const pos = target.clone().addScaledVector(away, dist).add(V3(0, st.type === 'prep' ? 0.56 : 0.6, 0));
+    if (st.type === 'mix') target.y += 0.02;
+    // a fixed, square-on view: the station's front, or the island side you're nearest
+    const away = F && F.st === st && F.viewDir ? F.viewDir : viewDir(st);
+    if (F && F.st === st) F.viewDir = away;
+    let dist = { mix: 0.95, decor: 0.9, prep: F && F.task && F.task.ing ? 0.95 : 0.8 }[st.type] || 0.85;
+    let rise = { mix: 0.8, prep: 0.56 }[st.type] || 0.6;
+    // narrow screens back off a little so the whole job fits across
+    if (aspect < 1) { const k = 1 + (1 - aspect) * 0.8; dist *= k; rise *= k; }
+    const pos = target.clone().addScaledVector(away, dist).add(V3(0, rise, 0));
     const fov = 55;
     const m = new THREE.Matrix4().lookAt(pos, target, V3(0, 1, 0));
     const quat = new THREE.Quaternion().setFromRotationMatrix(m);
@@ -1436,12 +1470,25 @@ async function start(hotData = {}) {
     return { pos, quat, fov };
   }
 
+  function viewDir(st) {
+    const q = st.group.getWorldQuaternion(new THREE.Quaternion());
+    if (st.type !== 'prep') return V3(0, 0, 1).applyQuaternion(q).setY(0).normalize();
+    const toP = V3(P.x - st.slot.x, 0, P.z - st.slot.z);
+    let best = null, bestK = -Infinity;
+    for (const d of [V3(1, 0, 0), V3(-1, 0, 0), V3(0, 0, 1), V3(0, 0, -1)]) {
+      d.applyQuaternion(q).setY(0).normalize();
+      const k = d.dot(toP);
+      if (k > bestK) { bestK = k; best = d; }
+    }
+    return best;
+  }
+
   function eyePose() {
     const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(pitch, yaw, 0, 'YXZ'));
     return { pos: V3(P.x, EYE, P.z), quat: q, fov: fpFov() };
   }
 
-  function tweenCam(to, dur = 0.35) {
+  function tweenCam(to, dur = 0.55) {
     S.camTween = { from: { pos: cam.position.clone(), quat: cam.quaternion.clone(), fov: cam.fov }, to, t: 0, dur };
   }
 
@@ -1527,7 +1574,9 @@ async function start(hotData = {}) {
   function chooseSide(st) {
     if (!st.sideSlots) return;
     const [a, b] = st.sideSlots;
-    st.sideSlot = P.distanceToSquared(a) < P.distanceToSquared(b) - 0.3 ? b : a;
+    // never between you and the board: when you look along the board, it goes on the far side
+    const d = viewDir(st);
+    st.sideSlot = a.clone().sub(st.slot).dot(d) > 0.1 ? b : a;
   }
 
   function resetTools(st) {
@@ -1706,6 +1755,15 @@ async function start(hotData = {}) {
         else sfx.whisk();
         F.chop = 1;
         F.side = -F.side;
+        // chips and crumbs fly off the knife, tamper or paw on the board
+        if (st.type === 'prep' && F.target && ['knife', 'tamper', 'paw', 'fork', 'scoop'].includes(F.tool)) {
+          const col = F.task.ing ? bitColor(F.task.ing) : F.it.d.batter || '#E9A95A';
+          const top = st.group.localToWorld(F.target.clone());
+          const reach = F.reach * 0.85, board = st.slot.y + 0.002;
+          // they settle on top of the food, or on the board if they fly clear of it
+          const floor = (x, z) => (Math.hypot(x - top.x, z - top.z) < reach ? top.y - 0.003 : board);
+          spawnCrumbs(top, col, F.tool === 'knife' ? 3 : 2, { spread: 0.35, up: 0.45, floor, life: 1.1 });
+        }
         if (F.mode === 'roll' || F.mode === 'wiggle') F.rollPos = F.side * (F.reach || 0.1) * 0.6;
         st.whiskBoost = 1;
         if (F.ingObj) F.ingObj.userData.squash = 1;
@@ -1896,14 +1954,17 @@ async function start(hotData = {}) {
         } else {
           // chopping: side-on to you, edge down, the handle lifting between cuts
           const u = F.mode === 'hit' ? (g.needle - 0.5) * 2 * R * 0.85 : Math.sin(g.count * 2.1) * R * 0.5;
-          at(u + 0.07, 0, 0.027 + 0.035 * (1 - F.chop));
-          toolQuat(q, yawX(ax.clone().negate()), [AX, Math.PI / 2], [AY, -0.3 * (1 - F.chop)]);
+          // down fast, slide through the cut, then lift; a gentle hover while you wait
+          const c = F.chop, down = c > 0.7 ? 1 : c / 0.7;
+          const lift = (1 - down) * (1 - down) * 0.045 + Math.sin(S.time * 3) * 0.003 * (1 - down);
+          at(u + 0.07, 0, 0.022 + lift).addScaledVector(away, Math.sin(c * Math.PI) * 0.025);
+          toolQuat(q, yawX(ax.clone().negate()), [AX, Math.PI / 2], [AY, -0.35 * (1 - down)]);
         }
         break;
       }
       case 'pin': {
         // the pin lies across your view and rolls toward and away from you
-        at(0, F.rollPos, 0.034);
+        at(0, F.rollPos, 0.028);
         toolQuat(q, yawX(ax), [AX, -F.rollPos / 0.034]);
         break;
       }
@@ -1911,12 +1972,17 @@ async function start(hotData = {}) {
         // leaning away from you so you can see the tip meet the treat
         const lean = qTmp.setFromAxisAngle(ax, -0.45).clone();
         if (F.mode === 'zigzag') {
-          at(sweep, Math.sin(S.time * 3) * R * 0.25, 0.03);
+          at(sweep, Math.sin(S.time * 3) * R * 0.25, 0.018);
           q.setFromAxisAngle(ay, -(g.sweepPos || 0) * 0.35).multiply(lean);
         } else {
           const rr = R * 0.55 * (1 - k * 0.8);
-          want.copy(T).addScaledVector(dirAt(a), rr).setY(Ty + 0.02);
+          want.copy(T).addScaledVector(dirAt(a), rr).setY(Ty + 0.01);
           q.setFromAxisAngle(dirAt(a + Math.PI / 2), 0.2).multiply(lean);
+        }
+        const bulb = t.userData.bulb;
+        if (bulb) {
+          const squeeze = Math.min(1, (F.activity || 0) * 1.5) * 0.08;
+          bulb.scale.set(1 + squeeze, Math.max(0.55, 1 - k * 0.4) * (1 - squeeze), 1 + squeeze);
         }
         break;
       }
@@ -1981,7 +2047,7 @@ async function start(hotData = {}) {
     lerpTo(t, want, s);
     t.quaternion.slerp(q, s);
     // a paring-sized knife for peeling and zesting, a small piping bag
-    const size = F.tool === 'knife' && (F.mode === 'swirl' || F.mode === 'roll') ? 0.7 : F.tool === 'bag' ? 0.6 : F.tool === 'paw' ? 0.72 : 1;
+    const size = F.tool === 'knife' && (F.mode === 'swirl' || F.mode === 'roll') ? 0.7 : F.tool === 'bag' ? 0.6 : F.tool === 'paw' ? 0.72 : F.tool === 'pin' ? 0.82 : 1;
     t.scale.setScalar(size);
     // the resting pin and knife stay put when they aren't the tool in use
     for (const key of ['pin', 'knife']) {
@@ -1993,28 +2059,62 @@ async function start(hotData = {}) {
   }
 
   // decorating tools hop over the treat, shake/pipe/drizzle, and hop back
+  const SPRINKLE_COLS = ['#EE93A6', '#86BADB', '#FFE08A', '#AFCB9C', '#F4A646'];
+  const POUR_COL = { fudge: '#5A3422', caramel: '#D9822F', pink: '#F7B9C4', bag: '#FFF3DC' };
+  const qRot = new THREE.Quaternion();
   function animateDecorTools(F, dt) {
     const st = F.st;
     const A = st.toolAnim;
     const tools = st.built.tools;
+    if (st.decorStream) st.decorStream.visible = false;
     if (!A || !tools[A.key]) return;
     const t = tools[A.key];
     A.t = Math.min(1, A.t + dt / 0.95);
     const rest = t.userData.rest;
-    const over = st.group.worldToLocal(st.slot.clone().add(V3(0, (F.it.obj ? F.it.obj.userData.top - st.slot.y : 0.12) + 0.1, 0)));
-    let p, r = rest.r.clone();
+    const topY = F.it.obj ? F.it.obj.userData.top : st.slot.y + 0.12;
+    const over = st.group.worldToLocal(st.slot.clone().setY(topY + 0.1));
+    const key = A.key;
+    const pours = key === 'fudge' || key === 'caramel' || key === 'pink' || key === 'bag';
+    const shakes = key === 'shaker' || key === 'sugar';
+    let p, r = rest.r.clone(), w = 0;
     if (A.t < 0.3) p = rest.p.clone().lerp(over, ease(A.t / 0.3));
     else if (A.t < 0.75) {
       p = over.clone();
-      const w = (A.t - 0.3) / 0.45;
-      if (A.key === 'shaker' || A.key === 'sugar') { r.set(Math.PI * 0.85, 0, Math.sin(w * 30) * 0.25); p.y += 0.06; }
-      else if (A.key === 'cherries' || A.key === 'nuts') { r.set(0, 0, 0.9 * Math.sin(w * Math.PI)); }
-      else if (A.key === 'spatula') { r.set(0, w * 6, 0); p.y -= 0.05; }
-      else { r.set(Math.PI * 0.9, 0, Math.sin(w * Math.PI * 4) * 0.2); p.y += 0.12; }
-      p.x += Math.sin(w * Math.PI * 2) * 0.05;
+      w = (A.t - 0.3) / 0.45;
+      if (shakes) { r.set(Math.PI * 0.85, 0, Math.sin(w * 30) * 0.25); p.y += 0.06; }
+      else if (key === 'cherries' || key === 'nuts') { r.set(0, 0, 0.9 * Math.sin(w * Math.PI)); p.y -= 0.02; }
+      else if (key === 'spatula') { r.set(0, w * 6, 0); p.y -= 0.07; }
+      else if (key === 'bag') { r.set(0.25, 0, 0); p.y -= 0.045; }
+      else { r.set(Math.PI * 0.92, 0, Math.sin(w * Math.PI * 4) * 0.15); p.y += 0.14; }
+      // trace a little circle over the treat while the topping goes on
+      p.x += Math.cos(w * Math.PI * 2) * 0.035;
+      p.z += Math.sin(w * Math.PI * 2) * 0.035;
     } else p = over.clone().lerp(rest.p, ease((A.t - 0.75) / 0.25));
     t.position.copy(p);
-    t.rotation.copy(A.t >= 0.999 ? rest.r : r);
+    // turn smoothly instead of snapping between poses
+    qRot.setFromEuler(A.t >= 0.75 ? rest.r : r);
+    t.quaternion.slerp(qRot, A.t >= 0.999 ? 1 : Math.min(1, dt * 14));
+    // what comes out of the tool: a stream from bottles and the bag, sprinkles and sugar from shakers
+    if (w > 0.12 && w < 0.95) {
+      t.updateMatrixWorld(true);
+      if (pours) {
+        const nozzle = t.localToWorld(key === 'bag' ? V3(0, -0.004, 0) : V3(0, 0.245, 0));
+        if (!st.decorStream) {
+          st.decorStream = mk(G.cyl(0.0055, 0.0045, 1, 0.002, 10), toon('#FFFFFF', { unique: true }), { outline: 'thin', cast: false });
+          scene.add(st.decorStream);
+        }
+        const sm = st.decorStream;
+        sm.material.color.set(POUR_COL[key]);
+        const drop = Math.max(0.005, nozzle.y - topY);
+        sm.visible = true;
+        sm.position.set(nozzle.x, nozzle.y - drop / 2, nozzle.z);
+        sm.scale.set(1, drop, 1);
+      } else if (Math.random() < dt * (shakes ? 40 : 7)) {
+        const from = t.localToWorld(shakes ? V3(0, 0.16, 0) : V3(0, 0.04, 0));
+        const col = key === 'sugar' ? '#FFFFFF' : key === 'shaker' ? pick(SPRINKLE_COLS) : key === 'nuts' ? '#B87A45' : key === 'cherries' ? '#E4605E' : '#5A3422';
+        spawnCrumbs(from, col, shakes ? 2 : 1, { spread: 0.12, up: -0.1, floor: topY - 0.01, size: key === 'cherries' ? 2.2 : key === 'nuts' ? 1.5 : 0.7, life: 0.7 });
+      }
+    }
     if (A.t >= 1) st.toolAnim = null;
   }
 

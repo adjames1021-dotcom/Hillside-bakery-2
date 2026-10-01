@@ -227,6 +227,18 @@ kbd {
 .icons { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 3px; }
 .icons img { width: 26px; height: 26px; border-radius: 8px; background: #fff; border: 2px solid transparent; filter: saturate(.35) opacity(.6); }
 .icons .ing { position: relative; display: inline-flex; }
+/* ingredient chips: icon plus name; ones still needed stand out, ones you have go green */
+.tsteps .icons .ing {
+  align-items: center; gap: 3px; padding: 1px 7px 1px 1px; border-radius: 99px;
+  background: #fff; border: 2px solid var(--ink); font-size: 11.5px; font-weight: 600; line-height: 1;
+}
+.tsteps .icons .ing img { width: 20px; height: 20px; border: 0; border-radius: 50%; filter: none; background: transparent; }
+.tsteps .icons .ing.got { background: #E4F0D8; border-color: var(--sageDark); }
+.tsteps .icons .ing.got .iname { text-decoration: line-through; text-decoration-thickness: 1.5px; opacity: .7; }
+.tsteps .icons .ing.raw { background: #FDE9D2; border-color: var(--pumpkin); }
+.tsteps .icons .ing.got img, .tsteps .icons .ing.raw img { border: 0; background: transparent; }
+.tsteps li:not(.now) .icons .ing { border-width: 1.5px; font-size: 10.5px; opacity: .85; }
+.tsteps .icons .ing.prep::after { right: auto; left: -5px; bottom: auto; top: -6px; }
 .icons .ing.got img { filter: none; border-color: var(--sageDark); background: #EEF6E6; }
 .icons .ing.prep::after {
   content: ""; position: absolute; right: -3px; bottom: -3px; width: 12px; height: 12px; border-radius: 50%;

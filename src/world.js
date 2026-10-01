@@ -12,6 +12,7 @@ import { ingredientModel, label } from './ingredients.js';
 import { BY_ID } from './desserts.js';
 import { dessertModel, fluted } from './dessert3d.js';
 import { buildHighlight, mergeStatic } from './merge.js';
+import { knifeModel, pinModel, pipingBag, spatulaModel, woodSpoon } from './tools.js';
 
 export const ROOM = { x0: -6, x1: 6, z0: -5, z1: 5, h: 3.6 };
 export const FP_LAYER = 1;
@@ -286,13 +287,7 @@ function buildDecor() {
   // piping bag standing in a cup
   const cup = put(g, mk(G.cyl(0.07, 0.06, 0.12, 0.02), C.blue, { outline: 'thin' }), -0.6, H + 0.06, -0.15);
   cup.userData.noHighlight = false;
-  const bag = new THREE.Group();
-  const cone = put(bag, mk(G.cyl(0.02, 0.085, 0.3, 0.02), '#FFFBF0'));
-  cone.position.y = 0.15;
-  put(bag, mk(G.cyl(0.006, 0.02, 0.05, 0.004), '#DCE6EA', { outline: 'thin' }), 0, -0.02, 0);
-  put(bag, mk(G.sphere(0.075, 18, 12), C.pink, { outline: 'thin' }), 0, 0.31, 0).scale.y = 0.6;
-  put(bag, mk(G.torus(0.03, 0.01, Math.PI * 2, 16), C.cherry, { outline: 'thin' }), 0, 0.36, 0).rotation.x = Math.PI / 2;
-  tools.bag = tool(g, bag, -0.6, H + 0.1, -0.15);
+  tools.bag = tool(g, pipingBag('#FFF3DC', 0.85), -0.6, H + 0.035, -0.15);
   // sprinkle shaker and powdered sugar shaker
   const shaker = (body, lid) => {
     const s = new THREE.Group();
@@ -333,10 +328,7 @@ function buildDecor() {
     for (let i = 0; i < 7; i++) put(d, mk(G.sphere(0.012, 10, 8), '#B87A45', { outline: 'thin' }), Math.cos(i * 2.4) * 0.03 * Math.sqrt(i / 7), 0.03, Math.sin(i * 2.4) * 0.03 * Math.sqrt(i / 7)).scale.set(1.3, 0.6, 0.9);
   }), 0.62, H, 0.17);
   // a spatula for spreading frosting
-  const spat = new THREE.Group();
-  put(spat, mk(G.box(0.05, 0.004, 0.16, 0.002), '#EEF2F4', { outline: 'thin' }), 0, 0, 0.08);
-  put(spat, mk(G.box(0.03, 0.025, 0.12, 0.01), C.honeyDark, { outline: 'thin' }), 0, 0, -0.06);
-  tools.spatula = tool(g, spat, -0.42, H + 0.013, 0.25, 0, 0.5, 0);
+  tools.spatula = tool(g, spatulaModel(), -0.42, H + 0.002, 0.25, 0, 0.5, 0);
   mergeStatic(turn);
   for (const t of Object.values(tools)) mergeStatic(t);
   return { group: g, hero: turn, face: null, turntable: turn, tools, slotLocal: V3(0, H + 0.212, 0.08) };
@@ -374,24 +366,11 @@ function buildIsland() {
   hole.scale.set(1.6, 1, 1);
   const props = dyn(put(board, new THREE.Group()));
   const tools = {};
-  const pin = new THREE.Group();
-  put(pin, mk(G.capsule(0.034, 0.34), C.honey, { outline: 'thin' })).rotation.z = Math.PI / 2;
-  for (const sx of [-1, 1]) put(pin, mk(G.capsule(0.016, 0.07), C.honeyDark, { outline: 'thin' }), sx * 0.25, 0, 0).rotation.z = Math.PI / 2;
-  tools.pin = tool(props, pin, -0.45, 0.034, 0, 0, Math.PI / 2, 0);
-  const knife = new THREE.Group();
-  put(knife, mk(G.box(0.17, 0.008, 0.05, 0.004), '#EAF1F0', { outline: 'thin' }), 0.07, 0, 0);
-  put(knife, mk(G.box(0.1, 0.022, 0.03, 0.01), C.honeyDark, { outline: 'thin' }), -0.08, 0.004, 0);
-  tools.knife = tool(props, knife, 0.28, 0.047, 0.02, 0, Math.PI / 2 + 0.15, 0);
+  tools.pin = tool(props, pinModel(), -0.45, 0.035, 0, 0, Math.PI / 2, 0);
+  tools.knife = tool(props, knifeModel(), 0.28, 0.0405, 0.06, 0, Math.PI / 2 + 0.15, 0);
   // tools that only come out while you use them
-  const bag = new THREE.Group();
-  put(bag, mk(G.cyl(0.018, 0.07, 0.24, 0.015), '#FFFBF0')).position.y = 0.12;
-  put(bag, mk(G.cyl(0.005, 0.018, 0.04, 0.004), '#DCE6EA', { outline: 'thin' }), 0, -0.015, 0);
-  put(bag, mk(G.sphere(0.062, 16, 10), C.pink, { outline: 'thin' }), 0, 0.25, 0).scale.y = 0.6;
-  tools.bag = tool(props, bag, 0, 0.3, 0);
-  const spatula = new THREE.Group();
-  put(spatula, mk(G.box(0.05, 0.004, 0.15, 0.002), '#EEF2F4', { outline: 'thin' }), 0, 0, 0.075);
-  put(spatula, mk(G.box(0.03, 0.024, 0.11, 0.01), C.honeyDark, { outline: 'thin' }), 0, 0, -0.055);
-  tools.spatula = tool(props, spatula, 0, 0.3, 0);
+  tools.bag = tool(props, pipingBag('#FFF3DC'), 0, 0.3, 0);
+  tools.spatula = tool(props, spatulaModel(), 0, 0.3, 0);
   const scoop = new THREE.Group();
   put(scoop, mk(G.lathe(v2([[0.0005, 0], [0.022, 0.003], [0.035, 0.016], [0.039, 0.032], [0.035, 0.034], [0.031, 0.019], [0.019, 0.009], [0.0005, 0.007]]), 28), '#DCE6EA', { outline: 'thin' }));
   put(scoop, mk(G.cyl(0.011, 0.011, 0.14, 0.005), C.honeyDark, { outline: 'thin' }), 0, 0.075, -0.07).rotation.x = -0.9;
@@ -410,17 +389,18 @@ function buildIsland() {
   put(tamper, mk(G.cyl(0.05, 0.055, 0.07, 0.02), C.blue, { outline: 'mid' }), 0, 0.035, 0);
   put(tamper, mk(G.cyl(0.015, 0.015, 0.12, 0.006), C.honeyDark, { outline: 'thin' }), 0, 0.12, 0);
   tools.tamper = tool(props, tamper, 0, 0.3, 0);
-  const spoon = new THREE.Group();
-  put(spoon, mk(G.sphere(0.03, 16, 10), C.honey, { outline: 'thin' })).scale.set(0.8, 0.35, 1);
-  put(spoon, mk(G.capsule(0.01, 0.18), C.honey, { outline: 'thin' }), 0, 0.1, -0.03).rotation.x = -0.35;
-  tools.spoon = tool(props, spoon, 0, 0.3, 0);
+  tools.spoon = tool(props, woodSpoon(), 0, 0.3, 0);
   // a fox paw for the jobs done by hand: crimping, cracking, laying strips, layering
   const paw = new THREE.Group();
-  put(paw, mk(G.sphere(0.05, 20, 14), '#E8893A', { outline: 'mid' })).scale.set(1.05, 0.82, 1.15);
-  for (let i = -1; i <= 1; i++) {
-    put(paw, mk(G.sphere(0.018, 12, 8), '#E8893A', { outline: 'thin' }), i * 0.024, -0.02, 0.042);
-    put(paw, mk(G.sphere(0.01, 8, 6), '#FFF3DC', { outline: false }), i * 0.024, -0.03, 0.05);
+  put(paw, mk(G.sphere(0.05, 20, 14), '#E8893A', { outline: 'mid' })).scale.set(1.05, 0.72, 1.1);
+  // four chubby toes along the front, each with a pink bean you can see from above
+  for (let i = 0; i < 4; i++) {
+    const x = (i - 1.5) * 0.022, z = 0.046 - Math.abs(i - 1.5) * 0.006;
+    put(paw, mk(G.sphere(0.0155, 12, 8), '#E8893A', { outline: 'thin' }), x, 0.006, z).scale.set(1, 0.85, 1.1);
+    put(paw, mk(G.sphere(0.0065, 8, 6), '#F7A8B4', { outline: false }), x, 0.0055, z + 0.012).scale.set(1, 0.7, 0.6);
   }
+  // a cream fluff cuff at the wrist
+  put(paw, mk(G.sphere(0.034, 14, 10), '#FFF3DC', { outline: 'thin' }), 0, 0.012, -0.042).scale.set(1.25, 0.8, 0.7);
   tools.paw = tool(props, paw, 0, 0.3, 0);
   for (const k of ['bag', 'spatula', 'scoop', 'pitcher', 'fork', 'tamper', 'spoon', 'paw']) tools[k].visible = false;
   // two set-down spots

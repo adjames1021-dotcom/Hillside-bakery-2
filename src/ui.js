@@ -171,7 +171,9 @@ export class UI {
             const have = i < stepIdx || (i === stepIdx && got.has(id));
             const isRaw = i === stepIdx && raw.has(id);
             const prepNote = s.needsPrep.includes(id) ? ` (${ING_PREP[id].label.toLowerCase()} at the Island)` : '';
-            return `<span class="ing ${have ? 'got' : ''} ${isRaw ? 'raw' : ''} ${s.needsPrep.includes(id) ? 'prep' : ''}"><img src="${ingredientURL(ING_BY_ID[id])}" alt="${ING_BY_ID[id].name}" title="${ING_BY_ID[id].name}${prepNote}"></span>`;
+            const name = ING_BY_ID[id].name;
+            // each ingredient is a named chip, so you know exactly what to fetch
+            return `<span class="ing ${have ? 'got' : ''} ${isRaw ? 'raw' : ''} ${s.needsPrep.includes(id) ? 'prep' : ''}" title="${name}${prepNote}"><img src="${ingredientURL(ING_BY_ID[id])}" alt=""><span class="iname">${name}</span></span>`;
           }).join('')}</span>`;
           if (i === stepIdx && raw.size) icons += `<span class="rawnote">Prep at the Island: ${[...raw].map((id) => ING_PREP[id].label).join(', ')}</span>`;
         } else if (s.t === 'decor') {

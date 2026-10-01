@@ -69,6 +69,8 @@ The **Mixing Bowl** reads the verb on the card: *knead* is tapping, *fold / stir
 
 **Stations do the work you can see.** Every action should look like what the card says:
 
+- **Close-ups:** the camera eases in to a square-on view of the station (at the island, from the side you stand at), with the work framed in the space between the top HUD and the mini-game card. Heavy appliances like the oven never bounce or wobble.
+- **Tools look like real tools:** a chef's knife with a curved edge, bolster and riveted handle; a tapered rolling pin with turned handles; cloth piping bags with a fluted metal star tip and a tied top whose belly squeezes and empties as you pipe; an offset spatula; a wooden spoon; a fox paw with toe beans. Chopping comes down fast, slides through and lifts; chips and crumbs fly off and settle on the food or the board. Bottles and the piping bag pour a stream onto the treat, shakers rain sprinkles and sugar, and the decorating tools turn smoothly instead of snapping.
 - **Prep Island:** the cutting board has a rolling pin and knife resting on it, and other tools (piping bag, spatula, spoon, scoop, pitcher, fork, tamper, a paw) come out only while they're needed. Tools follow your input in screen terms, wherever you stand: the knife chops where the timing slider is, edge-down and side-on; the pin lies across your view and rolls toward and away from you under the mouse; the bag and spatula trace your circles; the pitcher tips and pours a stream while you hold; the tamper presses on each tap. The part of the treat the step adds is built live: lattice strips and star vents pop in one at a time, frosting and fillings grow, layers stack, a s'more squishes down, an upside-down cake turns over.
 - **Mixing Bowl:** a side-on stand mixer with whisk, dough hook and paddle attachments. The bowl starts with chunks in the colours of what you gathered and blends to the batter colour as you mix; dough squashes with each knead.
 - **Stove:** an open pot you can see into, coloured by what's cooking (cherries, custard, fudge, caramel…), with bubbles that pop faster when it needs a stir. Fried treats sit in a pan of shimmering oil and flip into the air when you flip them; marshmallows toast golden on a skewer over the flame.
@@ -137,13 +139,14 @@ Rules:
   - cookies with **irregular hand-made edges** and domed middles
   - glaze drips on donuts, and a fluted ring cake
   - strawberries with seeds and a leafy star
+- **Pies:** each of the 11 pies looks distinct and gets richer once baked: crimped edges whose pinched peaks toast darker with dabs of egg-wash shine, lattice strips with a glossy stripe, fanned apple slices with red skins and cinnamon under the apple lattice, whole glossy cherries, rings of ridged pecan halves in caramel, a domed blueberry top crust with pastry leaves, star vents with berries peeking through and filling running over the edge, spiced specks and a set ring on custard pies, lime zest and a lime wheel on key lime, juice bubbling up between the fruit, and a glossy highlight on open fillings. Raw pies stay pale and matte.
 - **Ingredients:** fruit uses real lathe silhouettes: dimpled apples with a leaf and blush, peaches, pointed lemons and limes lying on their side, curved tapered bananas with brown tips, ribbed pumpkins, ringed carrots with feathery tops, egg-shaped eggs, and cherries with stems.
 - **No clipping, ever:** labels curve around jars and sacks and sit in front of crate slats; treats are scaled to fit the pan, tray, board, stand or freezer they're placed in; plates rest exactly on tables; the paws cradle what you carry from below its edges; sprinkles and sugar land on the real top surface of a treat (found by raycasting), never inside it or on a cherry; shine and frost decals are separate shapes, never coplanar; and the far-away title camera uses a tight near/far range so nothing z-fights.
 
 ## UI
 
 - Rounded "Fredoka"-style font. Cream pill buttons with thick brown borders and a hard drop shadow, with orange for primary actions.
-- **Tickets** are paper cards pinned at the top left. The active one shows the numbered steps, with ingredient and topping icons that tick off as you go, knife badges on ingredients that need prep, and tags for special requests, two-treat orders and the daily special.
+- **Tickets** are paper cards pinned at the top left. The active one shows the numbered steps, with ingredient chips that show each ingredient's icon and name (green and crossed off once it's in the bowl), topping icons that tick off as you go, knife badges on ingredients that need prep, and tags for special requests, two-treat orders and the daily special.
 - A top-center pill shows the day and a clock face that fills through open hours, next to a pill with today's special.
 - World speech bubbles with tails float over customers and busy stations: oven gauge, "Stir!", "Chilled!".
 - A bottom line always says what you're carrying and what to do next.
