@@ -1,6 +1,6 @@
-# Hillside Bakery: game prompt (v3)
+# Hillside Bakery: game prompt (v4)
 
-An improved version of the original prompt. It asks for a first-person game, a real pantry with Dry and Cold Storage, a center prep island, deep step-by-step recipes with ingredient prep and signature mini-games, custom orders, a day-by-day shop loop with a morning market, and detailed clay-miniature food. The game in this repository is built from it.
+An improved version of the original prompt. It asks for a first-person game, a real pantry with Dry and Cold Storage, a center prep island, deep step-by-step recipes with ingredient prep and signature mini-games, stations whose tools visibly do the work, custom orders, a day-by-day shop loop with a morning market, and detailed clay-miniature food with nothing clipping. The game in this repository is built from it.
 
 ---
 
@@ -50,7 +50,7 @@ Each dessert is a card of 3–8 steps done in order (about 5.5 on average). The 
 - squeeze the limes (hold)
 - mash the sweet potatoes and pumpkin; chop the chocolate, pecans and bread (taps)
 
-A "!" in the recipe data means use it whole (the apple on a caramel apple, the chocolate square in a s'more). The ticket shows a little knife badge on ingredients that need prep. While you prep, the whole ingredient sits on the cutting board and squashes with each stroke.
+A "!" in the recipe data means use it whole (the apple on a caramel apple, the chocolate square in a s'more). The ticket shows a little knife badge on ingredients that need prep. While you prep, the whole ingredient sits on the cutting board and shrinks with each stroke as a pile of prepped pieces (slices, cubes, shreds, cracked eggs) grows beside it; when it's done the pile hops into the bowl, which waits beside the board on the side away from you.
 
 **Mini-games.** Every active step is one of these, shown in a card at the bottom of a close-up camera:
 
@@ -59,18 +59,28 @@ A "!" in the recipe data means use it whole (the apple on a caramel apple, the c
 | Tap | Click, tap or Space per stroke | chop, press a crumb crust, knead |
 | Timing | Tap while a sliding marker is in the green zone. The zone moves and the slider speeds up after each hit. Three misses cost a star. | crimp edges, cut rings and shapes, scoop dough balls, split a banana, flip a cake, float a scoop |
 | Pour to the line | Hold to fill a gauge and let go inside the striped band. Overfilling or spilling costs a star. | fill liners and cups, pour filling, dip in glaze, scoop ice cream |
-| Circles | Move the mouse or a finger in smooth circles, counted by accumulated turning angle | pipe buttercream, whisk, beat, peel, smooth, spin cotton candy |
-| Side to side | Sweep left and right | fold, scatter crumble, drizzle glaze or caramel |
+| Circles | Move the mouse or a finger in circles of any size, either way. Track the pointer's angle around a center that trails behind it, so only real turning counts, not back-and-forth or jitter. | pipe buttercream, whisk, beat, peel, smooth, spin cotton candy |
+| Side to side | Sweep left and right (a sweep counts once it has travelled far enough; a small wobble back doesn't end it), or tap A and D | fold, scatter crumble, drizzle glaze or caramel |
 | Left / right | Alternate with A/D, the arrow keys, mouse flicks or two big buttons. Going to the wrong side three times costs a star. | weave a lattice, fork crisscross |
 | Layers | Press layer chips in the right order (keys 1–9). Two mistakes cost a star. | banana pudding, layered and stacked cakes, s'mores, shortcake |
 | Roll / hold / wiggle | Move up and down, hold, or wiggle | roll out dough, squeeze, beat fudge |
 
-The **Mixing Bowl** reads the verb on the card: *knead* is tapping, *fold / stir / soak* is side to side, and *whisk / beat / cream / whip / blend* is circles. **Bake** (Oven), **Cook** (Stove; stir twice when it bubbles) and **Chill** (Freezer) stay passive so you can juggle orders. The oven gauge runs baking → golden → toasty → burnt, and you can watch the treat through the glass door. The **Decorating Table** has a palette of 12 toppings, added in ticket order.
+The **Mixing Bowl** reads the verb on the card: *knead* is tapping, *fold / stir / soak* is side to side, and *whisk / beat / cream / whip / blend* is circles. **Bake** (Oven), **Cook** (Stove; stir twice when it bubbles) and **Chill** (Freezer) stay passive so you can juggle orders. The oven gauge runs baking → golden → toasty → burnt, and you can watch the treat through the glass door. The **Decorating Table** has a palette of 12 toppings, added in ticket order. A small animated dot on the mini-game card shows the gesture for the mouse games.
+
+**Stations do the work you can see.** Every action should look like what the card says:
+
+- **Prep Island:** the cutting board has a rolling pin and knife resting on it, and other tools (piping bag, spatula, spoon, scoop, pitcher, fork, tamper, a paw) come out only while they're needed. Tools follow your input in screen terms, wherever you stand: the knife chops where the timing slider is, edge-down and side-on; the pin lies across your view and rolls toward and away from you under the mouse; the bag and spatula trace your circles; the pitcher tips and pours a stream while you hold; the tamper presses on each tap. The part of the treat the step adds is built live: lattice strips and star vents pop in one at a time, frosting and fillings grow, layers stack, a s'more squishes down, an upside-down cake turns over.
+- **Mixing Bowl:** a side-on stand mixer with whisk, dough hook and paddle attachments. The bowl starts with chunks in the colours of what you gathered and blends to the batter colour as you mix; dough squashes with each knead.
+- **Stove:** an open pot you can see into, coloured by what's cooking (cherries, custard, fudge, caramel…), with bubbles that pop faster when it needs a stir. Fried treats sit in a pan of shimmering oil and flip into the air when you flip them; marshmallows toast golden on a skewer over the flame.
+- **Oven:** the door drops open when you load it, and treats bake on a tray (no dinner plates in the oven), puffing up a little as they bake.
+- **Freezer:** a chest freezer whose lid lifts and whose wire tray lowers the treat in, then raises it when it's set.
+- **Decorating Table:** a turntable stand; each topping's tool (shaker, sugar sifter, squeeze bottles, piping bag, fruit and nut dishes) hops over the treat, shakes or drizzles, and the topping lands while it's there.
+- Step back any time and your progress stays; if you step back the moment a step finishes, the treat still comes back to your paws.
 
 Rules:
 
 - One item per ticket. It lives in your paws, at a station, or on an island spot. Passive stations keep working while you start other orders, and that multitasking is the skill.
-- The treat you carry changes as you go: a bowl with each ingredient in its own little pile, then a bowl of batter, then a pale unbaked version, then a plain baked version, then the decorated final.
+- The treat you carry changes as you go: a bowl with each ingredient in its own little pile, then a bowl of batter, then the treat itself with only the steps done so far (a bare crust, then the lattice), pale before baking, then the decorated final.
 - If a customer leaves, their treat stays on the counter and joins the next order for the same dessert.
 - Examples:
   - **Apple Pie:** gather flour, butter, apples, cinnamon → peel the apples → knead → roll out the crust → weave the lattice (left/right) → bake until golden.
@@ -128,6 +138,7 @@ Rules:
   - glaze drips on donuts, and a fluted ring cake
   - strawberries with seeds and a leafy star
 - **Ingredients:** fruit uses real lathe silhouettes: dimpled apples with a leaf and blush, peaches, pointed lemons and limes lying on their side, curved tapered bananas with brown tips, ribbed pumpkins, ringed carrots with feathery tops, egg-shaped eggs, and cherries with stems.
+- **No clipping, ever:** labels curve around jars and sacks and sit in front of crate slats; treats are scaled to fit the pan, tray, board, stand or freezer they're placed in; plates rest exactly on tables; the paws cradle what you carry from below its edges; sprinkles and sugar land on the real top surface of a treat (found by raycasting), never inside it or on a cherry; shine and frost decals are separate shapes, never coplanar; and the far-away title camera uses a tight near/far range so nothing z-fights.
 
 ## UI
 

@@ -19,8 +19,8 @@ export const MODE_HINT = {
   wiggle: 'Wiggle the mouse (or drag) to work it.',
   hit: 'Tap when the slider is inside the green zone.',
   fill: 'Hold to pour, and let go inside the line.',
-  swirl: 'Move the mouse (or drag) in smooth circles.',
-  zigzag: 'Sweep the mouse (or drag) left and right.',
+  swirl: 'Move the mouse (or drag) in circles, any size, either way.',
+  zigzag: 'Sweep the mouse (or drag) left and right, or tap A and D.',
   alternate: 'Alternate left and right: A / D, arrow keys, flick the mouse or tap the buttons.',
   order: 'Add the layers in order. Click them or press their number.',
   decor: 'Add the toppings in recipe-card order. Keys 1–9, 0, - and = work too.',
@@ -49,13 +49,13 @@ export function createGame(mode, step, opts = {}) {
   const g = {
     mode, n, progress: 0, count: 0, mistakes: 0, penalty: 0, done: false,
     // hit
-    needle: 0, dir: 1, zoneC: 0.5, zoneW: opts.zone || 0.2, rate: 0.95,
+    needle: 0, dir: 1, zoneC: 0.5, zoneW: opts.zone || 0.22, rate: 0.9,
     // fill
-    level: 0, band: [0.7, 0.88], held: false, poured: false,
-    // swirl
-    angle: 0, lastDir: null,
+    level: 0, band: [0.68, 0.9], held: false, poured: false,
+    // swirl: a virtual pointer circling a center that lags behind it
+    angle: 0, turned: 0, net: 0, spin: 0, px: 0, py: 0, cx: 0, cy: 0, lastA: null,
     // zigzag / alternate
-    travel: 0, sweepSign: 0,
+    travel: 0, rev: 0, sweepSign: 0, counted: false, keySide: 0, sweepPos: 0,
     expect: 'L',
     // order
     seq: step.seq || [], choices: step.seq ? shuffle([...new Set(step.seq)]) : [],
@@ -90,7 +90,7 @@ export function createGame(mode, step, opts = {}) {
     switch (mode) {
       case 'tap': stroke(1); break;
       case 'roll': case 'wiggle': g.progress = Math.min(1, g.progress + 0.05 * speed); ev('stroke'); if (g.progress >= 0.999) finish(); break;
-      case 'swirl': g.angle += TAU * 0.12; ev('stroke'); break;
+      case 'swirl': g.angle += TAU * 0.12; g.turned += TAU * 0.12 * speed; g.net = g.turned; ev('stroke'); break;
       case 'zigzag': stroke(0.5); break;
       case 'hit': {
         const off = Math.abs(g.needle - g.zoneC);
@@ -115,6 +115,18 @@ export function createGame(mode, step, opts = {}) {
     } else mistake(3, side === 'L' ? 'Other side! Go right.' : 'Other side! Go left.');
   };
   g.alt = (side) => { doAlt(side); return events.splice(0); };
+
+  // zigzag by keyboard: A then D then A... each change of side is one sweep
+  g.key = (side) => {
+    if (g.done || mode !== 'zigzag') return events.splice(0);
+    const s = side === 'L' ? -1 : 1;
+    g.sweepPos = s;
+    if (s !== g.keySide) {
+      g.keySide = s;
+      stroke(1);
+    }
+    return events.splice(0);
+  };
 
   g.pick = (label) => {
     if (g.done || mode !== 'order') return events.splice(0);
@@ -172,36 +184,67 @@ export function createGame(mode, step, opts = {}) {
         break;
       }
       case 'swirl': {
-        const len = Math.hypot(m.dx, m.dy);
-        if (len > 1.5) {
-          const d = [m.dx / len, m.dy / len];
-          if (g.lastDir) {
-            const cross = g.lastDir[0] * d[1] - g.lastDir[1] * d[0];
-            const dot = g.lastDir[0] * d[0] + g.lastDir[1] * d[1];
-            const a = Math.atan2(cross, dot);
-            // big jumps are direction reversals, not circles
-            if (Math.abs(a) < 1.6) g.angle += a * speed;
+        // Track the pointer's angle around a center that trails behind it, so
+        // circles of any size, speed or direction count and jitter doesn't.
+        g.px += m.dx;
+        g.py += m.dy;
+        const lag = 1 - Math.exp(-Math.max(dt, 1e-3) / 0.22);
+        g.cx += (g.px - g.cx) * lag;
+        g.cy += (g.py - g.cy) * lag;
+        const rx = g.px - g.cx, ry = g.py - g.cy;
+        if (Math.hypot(rx, ry) > 9) {
+          const a = Math.atan2(ry, rx);
+          let d = g.lastA === null ? 0 : a - g.lastA;
+          while (d > Math.PI) d -= TAU;
+          while (d < -Math.PI) d += TAU;
+          if (g.lastA === null) {
+            // pick up where the tool is, without a jump
+            let j = a - g.angle;
+            while (j > Math.PI) j -= TAU;
+            while (j < -Math.PI) j += TAU;
+            g.angle += j;
+          } else if (Math.abs(d) < 1.3) {
+            // a sudden half-turn is a back-and-forth, not a circle
+            g.angle += d;
+            // count turning one way; aimless wiggles cancel out, and going back
+            // half a turn switches direction without losing what you've done
+            if (!g.spin) g.spin = Math.sign(d) || 1;
+            // (a little extra makes up for the moment the center takes to settle)
+            g.net += d * g.spin * speed * 1.15;
+            if (g.net > g.turned) g.turned = g.net;
+            else if (g.net < g.turned - Math.PI) { g.spin = -g.spin; g.net = g.turned; }
           }
-          g.lastDir = d;
-          ev('work');
-        }
-        const k = Math.abs(g.angle) / (TAU * n);
-        g.count = Math.floor(Math.abs(g.angle) / TAU);
+          g.lastA = a;
+          if (Math.hypot(m.dx, m.dy) > 1) ev('work');
+        } else g.lastA = null;
+        const k = g.turned / (TAU * n);
+        g.count = Math.floor(g.turned / TAU);
         g.progress = Math.min(1, k);
         if (k >= 1) finish();
         break;
       }
       case 'zigzag': {
-        if (Math.abs(m.dx) > 0.5) {
-          const s = Math.sign(m.dx);
-          if (s !== g.sweepSign) {
-            if (g.travel > 70) stroke(1);
-            g.sweepSign = s;
-            g.travel = 0;
+        // a sweep counts once it has gone far enough; a short wobble back doesn't end it
+        const dx = m.dx * speed;
+        if (Math.abs(dx) > 0.2) {
+          const s = Math.sign(dx);
+          if (!g.sweepSign) g.sweepSign = s;
+          if (s === g.sweepSign) {
+            g.travel += Math.abs(dx);
+            g.rev = 0;
+            if (!g.counted && g.travel > 42) { g.counted = true; stroke(1); }
+          } else {
+            g.rev += Math.abs(dx);
+            if (g.rev > 8) {
+              g.sweepSign = s;
+              g.travel = g.rev;
+              g.rev = 0;
+              g.counted = false;
+            }
           }
-          g.travel += Math.abs(m.dx) * speed;
-          ev('work');
+          if (Math.abs(m.dx) > 0.5) ev('work');
         }
+        g.sweepPos = Math.max(-1, Math.min(1, g.sweepPos + m.dx / 110));
         break;
       }
       case 'alternate': {
@@ -211,7 +254,7 @@ export function createGame(mode, step, opts = {}) {
           if (s !== g.sweepSign) { g.sweepSign = s; g.travel = 0; }
           g.travel += Math.abs(m.dx);
           const side = s < 0 ? 'L' : 'R';
-          if (g.travel > 60 && side === g.expect) {
+          if (g.travel > 40 && side === g.expect) {
             g.travel = -1e9; // one stroke per flick
             doAlt(side);
           }

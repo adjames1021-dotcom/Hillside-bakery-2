@@ -192,18 +192,32 @@ function roundedProfile(rt, rb, h, bevel, steps = 4) {
   return pts;
 }
 
+// Minimum smoothness by size: big shapes get more segments so the toon light
+// bands stay round up close, tiny crumbs and sprinkles stay cheap.
+const segFor = (r, asked, big = 32, mid = 20, small = 12) => Math.max(asked, r >= 0.09 ? big : r >= 0.025 ? mid : r >= 0.008 ? small : asked);
+
 export const G = {
   box: (w, h, d, r = 0.08) =>
     cached(`box${w},${h},${d},${r}`, () =>
-      new RoundedBoxGeometry(w, h, d, 3, Math.max(0.004, Math.min(r, w / 2 - 0.003, h / 2 - 0.003, d / 2 - 0.003)))),
-  sphere: (r, ws = 24, hs = 16) => cached(`sph${r},${ws},${hs}`, () => new THREE.SphereGeometry(r, ws, hs)),
-  capsule: (r, l) => cached(`cap${r},${l}`, () => new THREE.CapsuleGeometry(r, l, 6, 16)),
-  cyl: (rt, rb, h, bevel = 0.04, seg = 28) =>
-    cached(`cyl${rt},${rb},${h},${bevel},${seg}`, () => new THREE.LatheGeometry(roundedProfile(rt, rb, h, bevel), seg)),
-  lathe: (pts, seg = 24) =>
-    cached(`lat${seg}|${pts.map((p) => `${p.x.toFixed(4)},${p.y.toFixed(4)}`).join(';')}`, () => new THREE.LatheGeometry(pts, seg)),
-  torus: (r, t, arc = Math.PI * 2, seg = 24) =>
-    cached(`tor${r},${t},${arc},${seg}`, () => new THREE.TorusGeometry(r, t, 8, seg, arc)),
+      new RoundedBoxGeometry(w, h, d, Math.max(w, h, d) > 0.3 ? 4 : 3, Math.max(0.004, Math.min(r, w / 2 - 0.003, h / 2 - 0.003, d / 2 - 0.003)))),
+  sphere: (r, ws = 24, hs = 16) => {
+    const w = segFor(r, ws, 32, 20, 12);
+    const h = Math.max(hs, Math.round(w * 0.66));
+    return cached(`sph${r},${w},${h}`, () => new THREE.SphereGeometry(r, w, h));
+  },
+  capsule: (r, l) => cached(`cap${r},${l}`, () => new THREE.CapsuleGeometry(r, l, r >= 0.02 ? 8 : 5, segFor(r, 16, 24, 18, 12))),
+  cyl: (rt, rb, h, bevel = 0.04, seg = 28) => {
+    const n = segFor(Math.max(rt, rb), seg, 40, 24, 14);
+    return cached(`cyl${rt},${rb},${h},${bevel},${n}`, () => new THREE.LatheGeometry(roundedProfile(rt, rb, h, bevel, Math.max(rt, rb) >= 0.05 ? 5 : 4), n));
+  },
+  lathe: (pts, seg = 24) => {
+    const n = segFor(pts.reduce((m, p) => Math.max(m, p.x), 0), seg, 40, 24, 14);
+    return cached(`lat${n}|${pts.map((p) => `${p.x.toFixed(4)},${p.y.toFixed(4)}`).join(';')}`, () => new THREE.LatheGeometry(pts, n));
+  },
+  torus: (r, t, arc = Math.PI * 2, seg = 24) => {
+    const n = Math.max(seg, Math.round(segFor(r, seg, 48, 32, 20) * Math.max(0.3, arc / (Math.PI * 2))));
+    return cached(`tor${r},${t},${arc},${n}`, () => new THREE.TorusGeometry(r, t, t >= 0.015 ? 12 : 8, n, arc));
+  },
   circle: (r) => cached(`cir${r}`, () => new THREE.CircleGeometry(r, 24)),
   plane: (w, h) => cached(`pl${w},${h}`, () => new THREE.PlaneGeometry(w, h)),
 };

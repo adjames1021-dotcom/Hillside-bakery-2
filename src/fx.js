@@ -83,19 +83,21 @@ export class FX {
   constructor(scene) {
     this.scene = scene;
     this.parts = [];
+    // close-ups at a station shrink the effects so they don't fill the screen
+    this.scale = 1;
   }
 
   spawn(kind, pos, o = {}) {
     const mat = new THREE.SpriteMaterial({ map: TEX[kind], transparent: true, depthWrite: false, opacity: o.opacity ?? 1 });
     const s = new THREE.Sprite(mat);
     s.position.copy(pos);
-    const size = o.size ?? 0.4;
+    const size = (o.size ?? 0.4) * this.scale;
     s.scale.set(size, size, 1);
     s.renderOrder = 20;
     this.scene.add(s);
     this.parts.push({
       s, kind, size,
-      vel: o.vel ? o.vel.clone() : new THREE.Vector3(0, 1, 0),
+      vel: (o.vel ? o.vel.clone() : new THREE.Vector3(0, 1, 0)).multiplyScalar(this.scale),
       life: 0, max: o.life ?? 1,
       grow: o.grow ?? 0, grav: o.grav ?? 0, spin: o.spin ?? 0,
       baseOpacity: o.opacity ?? 1,
@@ -107,7 +109,7 @@ export class FX {
     for (let i = 0; i < n; i++) {
       const a = (i / n) * Math.PI * 2 + Math.random() * 0.5;
       const v = new THREE.Vector3(Math.cos(a) * 1.4, 0.5 + Math.random() * 0.6, Math.sin(a) * 1.4);
-      this.spawn('puff', pos.clone().add(new THREE.Vector3(0, 0.3, 0)), { vel: v, life: 0.6 + Math.random() * 0.3, size: size * (0.8 + Math.random() * 0.5), grow: 0.6 });
+      this.spawn('puff', pos.clone().add(new THREE.Vector3(0, 0.3 * this.scale, 0)), { vel: v, life: 0.6 + Math.random() * 0.3, size: size * (0.8 + Math.random() * 0.5), grow: 0.6 });
     }
   }
 

@@ -32,10 +32,11 @@ export function mergeStatic(root) {
   const buckets = new Map();
   const rel = new THREE.Matrix4();
   for (const o of list) {
-    const key = `${o.material.uuid}|${o.layers.mask}|${o.castShadow ? 1 : 0}${o.receiveShadow ? 1 : 0}|${o.renderOrder}`;
+    const noHl = o.userData.noHighlight ? 1 : 0;
+    const key = `${o.material.uuid}|${o.layers.mask}|${o.castShadow ? 1 : 0}${o.receiveShadow ? 1 : 0}|${o.renderOrder}|${noHl}`;
     let b = buckets.get(key);
     if (!b) {
-      b = { material: o.material, mask: o.layers.mask, cast: o.castShadow, receive: o.receiveShadow, renderOrder: o.renderOrder, geos: [] };
+      b = { material: o.material, mask: o.layers.mask, cast: o.castShadow, receive: o.receiveShadow, renderOrder: o.renderOrder, noHl, geos: [] };
       buckets.set(key, b);
     }
     const src = o.geometry;
@@ -76,6 +77,7 @@ export function mergeStatic(root) {
     mesh.layers.mask = b.mask;
     mesh.renderOrder = b.renderOrder;
     mesh.userData.merged = true;
+    if (b.noHl) mesh.userData.noHighlight = true;
     root.add(mesh);
     out.push(mesh);
   }
@@ -92,7 +94,8 @@ export function buildHighlight(obj) {
   obj.traverse((m) => {
     if (!m.isMesh || m.userData.outline || m.userData.hl || m.userData.noHighlight) return;
     const mat = m.material;
-    if (Array.isArray(mat) || mat.transparent) return;
+    // merged ink outlines are ShaderMaterial meshes; they don't need a highlight of their own
+    if (Array.isArray(mat) || mat.transparent || mat.isShaderMaterial) return;
     const t = m.geometry.type;
     if (t === 'PlaneGeometry' || t === 'CircleGeometry') return;
     sources.push(m);

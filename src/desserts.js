@@ -988,6 +988,58 @@ const BATTER = {
   'carrot-cake': '#E39A5A', 'bread-pudding': '#F3D08A', 'cheesecake': '#FFF1D0', 'baked-alaska': '#FFF6E6',
 };
 
+// What each step visibly adds to the treat (see the feature tags in dessert3d.js).
+const STEP_FX = {
+  'apple-pie': { 'Roll out the crust': 'crust', 'Weave the lattice': 'lattice' },
+  'pecan-pie': { 'Roll out the crust': 'crust', 'Crimp the edges': 'crimp', 'Pour in the filling': 'fill' },
+  'key-lime-pie': { 'Press the crumb crust': 'crust', 'Pour into the crust': 'fill' },
+  'pumpkin-pie': { 'Roll out the crust': 'crust', 'Crimp the edges': 'crimp' },
+  'cherry-pie': { 'Roll out the crust': 'crust', 'Weave the lattice': 'lattice' },
+  'banana-cream-pie': { 'Roll out the crust': 'crust', 'Layer the pie': 'layers' },
+  'blueberry-pie': { 'Roll out the crust': 'crust', 'Cut star vents': 'vents' },
+  'sweet-potato-pie': { 'Pour into the crust': 'fill' },
+  'mud-pie': { 'Press the cookie crust': 'crust' },
+  'peach-cobbler': { 'Drop biscuit spoonfuls': 'biscuits' },
+  'apple-crisp': { 'Scatter the topping': 'crumble' },
+  'cheesecake': { 'Press the crumb crust': 'crust', 'Smooth the top': 'body' },
+  'cupcake': { 'Fill the liners': 'fill', 'Pipe the buttercream swirl': 'frost' },
+  'red-velvet': { 'Stack the cake': 'layers' },
+  'boston-cream': { 'Layer the cake': 'layers' },
+  'carrot-cake': { 'Spread the frosting': 'frost' },
+  'devils-food': { 'Stack the layers': 'layers' },
+  'pineapple-upside-down': { 'Arrange the rings': 'rings', 'Flip it over': 'flip' },
+  'german-chocolate': { 'Spread the filling': 'frost' },
+  'pound-cake': { 'Pour into the loaf pan': 'fill', 'Drizzle the glaze': 'glaze' },
+  'strawberry-shortcake': { 'Layer the shortcake': 'layers' },
+  'whoopie-pies': { 'Scoop the rounds': 'rounds', 'Pipe the filling': 'frost', 'Sandwich them': 'sandwich' },
+  'chocolate-chip': { 'Scoop even dough balls': 'scoop' },
+  'brownies': { 'Cut into squares': 'cut' },
+  'snickerdoodles': { 'Roll in cinnamon sugar': 'sugar' },
+  'lemon-bars': { 'Press the shortbread': 'crust', 'Pour on the curd': 'fill' },
+  'rice-krispies': { 'Cut into squares': 'cut' },
+  'oatmeal-raisin': { 'Scoop even dough balls': 'scoop' },
+  'peanut-butter': { 'Press the fork crisscross': 'fork' },
+  'sugar-cookies': { 'Roll out the dough': 'dough', 'Cut out shapes': 'cut' },
+  'glazed-donuts': { 'Cut the rings': 'cut', 'Dip in the glaze': 'glaze' },
+  'cinnamon-rolls': { 'Roll out the dough': 'dough', 'Roll up the swirl': 'roll' },
+  'apple-fritters': { 'Shape the fritters': 'shape', 'Drizzle the glaze': 'glaze' },
+  'blueberry-muffins': { 'Fill the muffin cups': 'fill' },
+  'beignets': { 'Roll out the dough': 'dough', 'Cut little squares': 'cut' },
+  'bread-pudding': { 'Pour into the dish': 'fill', 'Drizzle the caramel': 'glaze' },
+  'sundae': { 'Scoop three scoops': 'scoops' },
+  'milkshake': { 'Pour into the glass': 'fill' },
+  'banana-pudding': { 'Layer the pudding': 'layers' },
+  'banana-split': { 'Split the banana': 'split', 'Scoop three flavors': 'scoops' },
+  'root-beer-float': { 'Pour slowly, no spills!': 'fill', 'Float a scoop on top': 'scoop' },
+  'baked-alaska': { 'Dome the ice cream': 'dome', 'Pipe meringue peaks': 'meringue' },
+  'ice-cream-sandwich': { 'Sandwich & press': 'sandwich' },
+  'smores': { 'Stack it up': 'layers', 'Squish it together': 'squish' },
+  'caramel-apple': { 'Dip & twirl': 'dip' },
+  'fudge': { 'Pour into the pan': 'fill', 'Cut into squares': 'cut' },
+  'pralines': { 'Spoon onto wax paper': 'spoon' },
+  'cotton-candy': { 'Spin the floss': 'floss' },
+};
+
 // The Mixing Bowl plays differently depending on the verb on the card.
 function mixMode(label) {
   if (/knead|crumble|rub/i.test(label)) return { mode: 'tap', n: 8, tapLabel: 'Knead!' };
@@ -1014,6 +1066,8 @@ export const DESSERTS = D.map(([id, name, cat, desc, draw], i) => {
     }
     if (s.t === 'mix') Object.assign(s, mixMode(s.label || ''));
     s.label = stepLabel(s);
+    const fx = STEP_FX[id] && STEP_FX[id][s.label];
+    if (fx) s.fx = fx;
     s.station = STEP_STATION[s.t];
     return s;
   });

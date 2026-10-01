@@ -24,6 +24,8 @@ export class ViewModel {
     this.reach = 0;
     this.lift = 0;
     this.visible = true;
+    this.heldBox = null;
+    this.tmpM = new THREE.Matrix4();
   }
 
   makeArm(side) {
@@ -49,13 +51,20 @@ export class ViewModel {
   setHeld(obj) {
     if (this.held) this.holder.remove(this.held);
     this.held = obj;
+    this.heldBox = null;
     if (!obj) return;
+    obj.position.set(0, 0, 0);
+    obj.scale.setScalar(1);
+    obj.updateMatrixWorld(true);
     const box = new THREE.Box3().setFromObject(obj);
     const size = box.getSize(new THREE.Vector3());
     const s = 0.26 / Math.max(size.x, size.z, size.y * 0.8, 0.001);
     obj.scale.setScalar(s);
-    obj.position.set(0, 0, 0);
+    // center it over the holder so the paws can cradle it from below
+    const c = box.getCenter(new THREE.Vector3());
+    obj.position.set(-c.x * s, -box.min.y * s, -c.z * s);
     this.holder.add(obj);
+    this.heldBox = { hx: (size.x * s) / 2, hz: (size.z * s) / 2, h: size.y * s };
     this.lift = 1;
   }
 
@@ -76,12 +85,20 @@ export class ViewModel {
     // narrow screens: pull the paws in so they stay on screen
     const squeeze = Math.min(1, Math.max(0.6, aspect * 0.9));
     const low = aspect < 1 ? 0.05 : 0;
-    this.holder.position.set(0, -0.26 - low - this.lift * 0.08, -0.62);
-    this.holder.rotation.set(0.42, 0.25, 0);
+    this.holder.position.set(0, -0.235 - low - this.lift * 0.08, -0.62);
+    this.holder.rotation.set(0.4, 0.25, 0);
+    this.holder.updateMatrix();
     for (const a of this.arms) {
-      const target = holding
-        ? new THREE.Vector3(a.side * 0.15 * squeeze, -0.3, -0.52)
-        : new THREE.Vector3(a.side * 0.2 * squeeze, -0.34, -0.46);
+      let target;
+      if (holding && this.heldBox) {
+        // paws sit just outside and under the bottom left/right edges of what we carry
+        const b = this.heldBox;
+        target = new THREE.Vector3(a.side * (b.hx * 0.92 + 0.035), -0.045, b.hz * 0.25).applyMatrix4(this.holder.matrix);
+      } else {
+        target = holding
+          ? new THREE.Vector3(a.side * 0.15 * squeeze, -0.3, -0.52)
+          : new THREE.Vector3(a.side * 0.2 * squeeze, -0.34, -0.46);
+      }
       if (a.side > 0 && this.reach > 0) {
         const k = Math.sin(this.reach * Math.PI);
         target.lerp(new THREE.Vector3(0.1, -0.17, -0.72), k);

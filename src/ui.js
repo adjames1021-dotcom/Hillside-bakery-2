@@ -225,7 +225,17 @@ export class UI {
     g.el.hidden = false;
     g.station.textContent = station;
     g.title.textContent = title;
-    g.hint.textContent = hint;
+    // a little moving dot shows the motion for the mouse-gesture games
+    g.hint.textContent = '';
+    if (['swirl', 'zigzag', 'roll', 'wiggle'].includes(mode)) {
+      const ico = document.createElement('span');
+      ico.className = 'gesture';
+      ico.dataset.g = mode;
+      ico.setAttribute('aria-hidden', 'true');
+      ico.append(document.createElement('i'));
+      g.hint.append(ico);
+    }
+    g.hint.append(hint);
     g.el.dataset.mode = mode;
     const picks = mode === 'decor' || mode === 'order';
     g.meter.hidden = picks || mode === 'hit' || mode === 'alternate';

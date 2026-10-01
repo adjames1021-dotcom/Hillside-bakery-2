@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { outlineUniforms, setOutlineScale, setMaxAnisotropy } from './toon.js';
+import { G, mk, toon, outlineUniforms, setOutlineScale, setMaxAnisotropy } from './toon.js';
 import { buildWorld, ROOM, FP_LAYER } from './world.js';
 import { makeAnimal, animateAnimal } from './characters.js';
 import { DESSERTS, BY_ID, CATEGORIES, STATIONS, TOPPINGS, TOPPING_BY_ID, ING_PREP, dessertURL } from './desserts.js';
@@ -7,7 +7,7 @@ import { ING_BY_ID, prepModel } from './ingredients.js';
 import { createGame, MODE_HINT, TAP_LABEL } from './minigames.js';
 import { Shop, UPGRADES, DECOR, freshStock } from './shop.js';
 import { buildDecorPieces, buildOpenSign } from './decor.js';
-import { dessertModel, bowlModel } from './dessert3d.js';
+import { dessertModel, bowlModel, liveFeature, featureProgress, featureTick, bitPile, bitColor } from './dessert3d.js';
 import { buildHighlight } from './merge.js';
 import { ViewModel } from './viewmodel.js';
 import { Input } from './input.js';
@@ -39,6 +39,7 @@ const an = (name, cap = false) => `${/^[aeiou]/i.test(name) ? (cap ? 'An' : 'an'
 const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
 const ease = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
 const V3 = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
+const ROOM_CENTER = new THREE.Vector3(0, 1.2, 0);
 
 const newReport = () => ({ served: 0, coins: 0, tips: 0, stars: 0, left: 0, favs: {} });
 
@@ -201,49 +202,116 @@ async function start(hotData = {}) {
 
   // ---------------------------------------------------------------- items
 
+  const isFryStep = (s) => !!s && s.t === 'cook' && /fry|oil/i.test(s.label);
+  const isToastStep = (s) => !!s && s.t === 'cook' && /toast/i.test(s.label);
+  const COOK_COLORS = [
+    [/cherr/i, '#C8384A'], [/peach/i, '#F6A55A'], [/custard|curd/i, '#FFE066'], [/hot fudge|fudge|cocoa|chocolate/i, '#5A3422'],
+    [/marshmallow/i, '#FFF6F0'], [/caramel|brown sugar|praline/i, '#C9782F'], [/coconut/i, '#D9B27A'], [/sugar/i, '#FFF3DC'],
+  ];
+  function cookColor(step, it) {
+    for (const [re, col] of COOK_COLORS) if (re.test(step.label)) return col;
+    return it.d.batter;
+  }
+
+  // How a treat looks right now: a bowl of ingredients, a bowl of batter, or the
+  // treat itself with the features of unfinished steps hidden (and the step being
+  // played built live, so the station can grow it as you work).
   function itemLook(it) {
     const steps = it.steps;
-    if (it.preview) it = { ...it, step: it.step + 1, burnt: it.previewBurnt || it.burnt };
+    let k = it.step;
+    let burnt = it.burnt;
+    if (it.preview) { k += 1; burnt = it.previewBurnt || it.burnt; }
     let form = 'bowl';
     const bits = [];
-    for (let i = 0; i < steps.length && i <= it.step; i++) {
+    for (let i = 0; i < k && i < steps.length; i++) {
       const s = steps[i];
-      if (i < it.step) {
-        if (s.t === 'gather') { if (form !== 'model') bits.push(...s.items); }
-        else if (s.t === 'mix') { if (form === 'bowl') form = 'batter'; }
-        else form = 'model';
-      } else if (s.t === 'gather' && form !== 'model') {
-        bits.push(...it.got);
-      }
+      if (s.t === 'gather') { if (form !== 'model') bits.push(...s.items); }
+      else if (s.t === 'mix' || s.t === 'cook' || s.t === 'chill') {
+        // whatever was in the bowl is mixed (or melted) into the batter now
+        if (form === 'bowl') form = 'batter';
+        bits.length = 0;
+      } else form = 'model';
     }
-    if (form !== 'model') return { kind: 'bowl', bits: form === 'batter' ? bits.slice(-6) : bits, batter: form === 'batter' ? it.d.batter : null };
-    const rest = steps.slice(it.step);
+    const cur = it.preview ? null : steps[k];
+    const st = it.where === 'station' ? it.station : null;
+    const F = S.focus && S.focus.it === it ? S.focus : null;
+    const live = F && !F.task.ing && cur && cur.fx && cur.fx !== 'flip' ? cur.fx : null;
+    // shaping at the island and baking in the oven turn the batter into the treat right there
+    if (form !== 'model' && cur && ((live && cur.t === 'prep') || (st && st.type === 'bake' && cur.t === 'bake'))) form = 'model';
+    if (form !== 'model') {
+      if (cur && cur.t === 'gather') bits.push(...it.got);
+      const batter = form === 'batter' ? it.d.batter : null;
+      return { kind: 'bowl', bits: bits.slice(-8), batter };
+    }
+    const rest = steps.slice(k);
+    const tops = steps.slice(0, k).filter((s) => s.t === 'decor').flatMap((s) => s.tops);
+    if (cur && cur.t === 'decor') tops.push(...cur.tops.slice(0, F ? F.idx : it.decorIdx || 0));
     return {
       kind: 'model',
-      bare: rest.some((s) => s.t === 'decor'),
+      hide: rest.filter((s) => s.fx).map((s) => s.fx),
+      live,
+      tops,
       raw: rest.some((s) => s.t === 'bake' || s.t === 'cook'),
-      burnt: it.burnt,
+      burnt,
+      noPlate: !!st && (st.type === 'bake' || (st.type === 'cook' && isFryStep(cur))),
+      flip: !!F && !F.task.ing && !!cur && cur.fx === 'flip',
     };
   }
 
-  function stationShowsItem(st) {
+  function stationShowsItem(st, look) {
     if (st.type === 'mix') return false;
-    if (st.type === 'chill') return !!st.done;
+    if (st.type === 'cook') return look.kind === 'model' && st.cookMode === 'pan';
     return true;
   }
+
+  // the biggest footprint (radius) and height each spot holds, so treats sit in
+  // pans, on trays and on the board without poking through anything
+  const FIT = { prep: [0.2, 0.34], spot: [0.18, 0.42], decor: [0.3, 0.6], bake: [0.3, 0.32], cook: [0.165, 0.16], chill: [0.3, 0.5], mix: [0.3, 1] };
 
   function placeItem(it) {
     if (it.obj) it.obj.removeFromParent();
     const look = itemLook(it);
-    const obj = look.kind === 'bowl' ? bowlModel(look.bits, look.batter) : dessertModel(it.d, look);
-    it.obj = obj;
+    let obj = look.kind === 'bowl' ? bowlModel(look.bits, look.batter) : dessertModel(it.d, look);
+    it.look = look;
+    it.live = look.kind === 'model' && look.live ? liveFeature(obj) : null;
     if (it.where === 'hands') {
+      it.obj = obj;
       vm.setHeld(obj);
-    } else if (it.where === 'station') {
-      obj.position.copy(it.station.slot);
-      obj.visible = stationShowsItem(it.station);
-      scene.add(obj);
+      return;
     }
+    if (it.where !== 'station') {
+      it.obj = obj;
+      return;
+    }
+    const st = it.station;
+    const F = S.focus && S.focus.it === it ? S.focus : null;
+    // while prepping ingredients the bowl waits beside the cutting board
+    const side = !!st.sideSlot && (F ? !!F.task.ing : !!curStep(it) && curStep(it).t === 'gather');
+    const slot = side ? st.sideSlot : st.slot;
+    const [r, h] = side ? [0.17, 0.3] : FIT[st.type] || [0.3, 0.6];
+    obj.updateMatrixWorld(true);
+    const box = new THREE.Box3().setFromObject(obj);
+    const size = box.getSize(V3()), c = box.getCenter(V3());
+    const s = Math.min(1, r / Math.max(size.x / 2, size.z / 2, 1e-3), h / Math.max(size.y, 1e-3));
+    obj.scale.setScalar(s);
+    obj.position.set(slot.x - c.x * s, slot.y - box.min.y * s, slot.z - c.z * s);
+    obj.userData.y0 = obj.position.y;
+    obj.userData.top = slot.y + size.y * s;
+    obj.userData.radius = Math.max(size.x, size.z) * s * 0.5;
+    if (look.flip) {
+      // turn the cake over around its middle
+      const pivot = new THREE.Group();
+      pivot.position.set(slot.x, slot.y + size.y * s * 0.5, slot.z);
+      obj.position.sub(pivot.position);
+      pivot.add(obj);
+      pivot.rotation.x = Math.PI;
+      pivot.userData = { ...obj.userData, flip: true };
+      obj = pivot;
+    }
+    it.obj = obj;
+    obj.visible = stationShowsItem(st, look);
+    scene.add(obj);
+    if (it.live) featureProgress(it.live, F && F.game ? F.game.progress : 0);
   }
 
   function newItem(tk) {
@@ -1021,7 +1089,16 @@ async function start(hotData = {}) {
         if (it) return nope('Your paws are full! Set something down on the island first.');
         return takeFromStation(st);
       }
-      if (!it) return enterFocus(st);
+      if (!it) {
+        // nothing left to do here (a finished step): just pick it back up
+        if (isDone(si) || (curStep(si).t === 'gather' && !si.raw.size)) {
+          st.item = null;
+          toHands(si);
+          sfx.pop();
+          return;
+        }
+        return enterFocus(st);
+      }
       return nope(`The ${st.name} is busy with the ${si.d.name}.`);
     }
     if (!it) return ui.toast(stationHint(st));
@@ -1041,7 +1118,16 @@ async function start(hotData = {}) {
     st.phase = null;
     st.stirDue = false;
     st.stirs = 0;
+    st.flipT = 0;
     st.bounce = 1;
+    if (st.type === 'cook') {
+      // fry in the pan, toast on a skewer, everything else simmers in the pot
+      st.cookMode = isToastStep(step) ? 'toast' : itemLook(it).kind === 'model' && isFryStep(step) ? 'pan' : 'pot';
+      st.cookColor = cookColor(step, it);
+    }
+    if (st.type === 'bake') { st.doorOpen = 0.7; sfx.door(); }
+    // the freezer tray waits up at the rim, then lowers the treat in
+    if (st.type === 'chill') { st.lidOpen = 0.8; st.lift = LIFT; }
     placeItem(it);
     sfx.place();
     if (ACTIVE[st.type]) return enterFocus(st);
@@ -1049,18 +1135,26 @@ async function start(hotData = {}) {
       ui.toast(wantsToasty(it) ? `Baking the ${it.d.name}. ${it.ticket.customer.name} likes it extra toasty, so wait for the toasty zone!` : `Baking the ${it.d.name}. Take it out when the gauge is golden!`);
       tip('oven', 'Tip: start another order while the oven works. Just come back when it dings.');
     }
-    if (st.type === 'cook') ui.toast(`Cooking the ${it.d.name}. Stir when the pot calls you!`);
+    if (st.type === 'cook') ui.toast(st.cookMode === 'pan' ? `Frying the ${it.d.name}. Flip it when the pan sizzles!` : st.cookMode === 'toast' ? 'Toasting the marshmallow. Turn it when it starts to brown!' : `${step.label}. Stir when the pot bubbles!`);
     if (st.type === 'chill') ui.toast(`Chilling the ${it.d.name}…`);
   }
+
+  const stirWord = (st) => (st.cookMode === 'pan' ? 'Flip' : st.cookMode === 'toast' ? 'Turn' : 'Stir');
 
   function stir(st) {
     st.stirDue = false;
     st.stirs += 1;
-    st.spin = 1;
     st.bounce = 1;
-    sfx.stir();
-    fx.sparkles(st.slot.clone().setY(1.3), 5);
-    ui.toast('Stirred! Nice and smooth.', 'good');
+    if (st.cookMode === 'pan') {
+      st.flipT = 1;
+      sfx.whoosh();
+      ui.toast('Flipped! Golden on both sides.', 'good');
+    } else {
+      st.spin = 1;
+      sfx.stir();
+      ui.toast(st.cookMode === 'toast' ? 'Turned! Toasty all the way around.' : 'Stirred! Nice and smooth.', 'good');
+    }
+    fx.sparkles((st.cookMode === 'pot' ? st.potTop : st.slot).clone().add(V3(0, 0.12, 0)), 5);
   }
 
   function takeFromStation(st) {
@@ -1084,6 +1178,7 @@ async function start(hotData = {}) {
     st.phase = null;
     st.stirDue = false;
     st.bounce = 1;
+    st.cookMode = null;
     toHands(it);
     fx.sparkles(st.slot.clone().setY(st.slot.y + 0.2), 6);
     sfx.pop();
@@ -1093,6 +1188,10 @@ async function start(hotData = {}) {
       : it.burnt === 1 ? 'A bit toasty, but still tasty. ' : it.burnt === 2 ? 'Oops, a little burnt! ' : '';
     ui.toast(`${msg}${it.d.name}: ${isDone(it) ? 'ready to serve!' : `next, ${nextStepText(it)}.`}`, it.burnt && !(toastyWish && it.burnt === 1) ? 'sad' : 'good');
   }
+
+  const tmpCol = new THREE.Color(), tmpCol2 = new THREE.Color();
+  const LIFT = 0.6; // how far the freezer tray rises
+  const mixCol = (a, b, k) => tmpCol.set(a).lerp(tmpCol2.set(b), clamp(k, 0, 1));
 
   function updateStations(dt) {
     for (const st of stationList) {
@@ -1113,6 +1212,11 @@ async function start(hotData = {}) {
             if (ph === 'burnt') { sfx.alarm(); ui.toast(`Oh no, the ${it.d.name} is burning!`, 'sad'); }
             st.phase = ph;
           }
+          // treats puff up gently as they bake
+          if (it.obj && ph === 'baking') {
+            const k = clamp(st.t / stepDur(step), 0, 1);
+            it.obj.scale.y = it.obj.scale.x * (0.9 + 0.1 * k);
+          }
           if ((ph === 'toasty' || ph === 'burnt') && Math.random() < dt * (ph === 'burnt' ? 6 : 2.5)) {
             fx.steam(st.group.localToWorld(st.built.chimneyTop.clone()));
           }
@@ -1122,7 +1226,7 @@ async function start(hotData = {}) {
             st.stirT = has('pot') ? 8 : 5.5;
             sfx.alarm();
             st.bounce = 1;
-            ui.toast(`The pot is bubbling! Stir the ${it.d.name}.`);
+            ui.toast(st.cookMode === 'pan' ? `The pan is sizzling! Flip the ${it.d.name}.` : st.cookMode === 'toast' ? 'The marshmallow is browning! Turn it.' : `The pot is bubbling! Stir the ${it.d.name}.`);
           }
           if (st.stirDue) {
             st.t -= dt;
@@ -1133,7 +1237,7 @@ async function start(hotData = {}) {
               if (!it.scorched) {
                 it.scorched = true;
                 it.stars = Math.max(1, it.stars - 1);
-                ui.toast('It scorched a little! Stir when the pot bubbles.', 'sad');
+                ui.toast(st.cookMode === 'pot' ? 'It scorched a little! Stir when the pot bubbles.' : 'One side got a bit dark! Catch it next time.', 'sad');
               }
               sfx.sad();
             }
@@ -1144,19 +1248,19 @@ async function start(hotData = {}) {
             ui.toast(`${step.label}: done! Grab it from the stove.`, 'good');
             st.bounce = 1;
           }
-          if (Math.random() < dt * 4) fx.steam(st.slot.clone().setY(st.slot.y + 0.25));
+          if (Math.random() < dt * 4) fx.steam((st.cookMode === 'pot' ? st.potTop : st.slot).clone().add(V3(0, 0.12, 0)));
         } else if (st.type === 'chill') {
           if (!st.done && st.t >= stepDur(step)) {
             st.done = true;
-            if (it.obj) it.obj.visible = true;
             sfx.frost();
             ui.toast(`${step.label}: done! Grab it from the freezer.`, 'good');
             st.bounce = 1;
+            fx.sparkles(st.slot.clone().setY(st.slot.y + 0.3), 10, 0.3);
           }
-          if (!st.done && Math.random() < dt * 3) fx.sparkles(st.slot.clone().setY(1.0), 1, 0.25);
+          if (!st.done && Math.random() < dt * 3) fx.sparkles(st.slot.clone().setY(0.98), 1, 0.25);
         }
       }
-      // personalities and props
+      // props and appliances react
       const working = !!it && (PASSIVE[st.type] ? !st.done && !(st.type === 'bake' && bakePhase(st) !== 'baking') : S.focus?.st === st);
       const b = st.built;
       if (st.type === 'bake') {
@@ -1169,16 +1273,51 @@ async function start(hotData = {}) {
         if (it && Math.random() < dt * 2.5) fx.steam(st.group.localToWorld(b.chimneyTop.clone()));
       }
       if (st.type === 'cook') {
-        b.flame.material.opacity = it && !st.done ? 0.55 + Math.sin(S.time * 14) * 0.12 : 0;
+        const mode = it ? st.cookMode : null;
+        const cooking = !!it && !st.done;
+        b.flame.material.opacity = mode === 'pot' && cooking ? 0.55 + Math.sin(S.time * 14) * 0.12 : 0;
+        b.panFlame.material.opacity = (mode === 'pan' || mode === 'toast') && cooking ? 0.5 + Math.sin(S.time * 13) * 0.12 : 0;
+        // the pot shows what's simmering, with bubbles that pop faster when it needs stirring
+        const contents = mode === 'pot' ? st.cookColor : '#F3D9A6';
+        b.soupMat.color.copy(mixCol(contents, '#8A3E22', st.stirDue ? 0.15 : 0));
+        b.bubbleMat.color.copy(mixCol(contents, '#FFFBF0', 0.45));
+        for (const bb of b.bubbles) {
+          const ph = (S.time * (st.stirDue ? 3.2 : 1.5) + bb.userData.phase) % 1;
+          bb.scale.setScalar(mode === 'pot' && cooking ? Math.max(0.01, Math.sin(ph * Math.PI)) : 0.01);
+        }
         st.spin = Math.max(0, (st.spin || 0) - dt * 1.5);
-        b.spoon.rotation.y += dt * (st.spin * 14 + (it ? 0.6 : 0));
-        b.soupMat.color.set(st.stirDue ? '#F0A35A' : it ? '#F3C07A' : '#F3D9A6');
+        b.spoon.rotation.y += dt * (st.spin * 14 + (mode === 'pot' && cooking ? 0.8 : 0));
+        // the pan shimmers; a flip tosses the treat up and over
+        b.oilMat.emissiveIntensity = mode === 'pan' && cooking ? 0.2 + Math.sin(S.time * 9) * 0.06 : 0;
+        if (mode === 'pan' && it.obj) {
+          st.flipT = Math.max(0, (st.flipT || 0) - dt * 2.2);
+          const f = st.flipT;
+          it.obj.position.y = it.obj.userData.y0 + Math.sin(f * Math.PI) * 0.16;
+          it.obj.rotation.x = (1 - f) * Math.PI * 2 * (f > 0 ? 1 : 0);
+          if (cooking && Math.random() < dt * 3) fx.sparkles(st.slot.clone().add(V3((Math.random() - 0.5) * 0.2, 0.03, (Math.random() - 0.5) * 0.2)), 1, 0.12);
+        }
+        // a marshmallow on a stick turns golden over the open flame (the pan steps aside)
+        b.skewer.visible = mode === 'toast';
+        b.pan.visible = mode !== 'toast';
+        if (mode === 'toast') {
+          b.mallowMat.color.copy(mixCol('#FFF6F0', '#C9783A', st.t / stepDur(curStep(it))));
+          b.skewer.rotation.x += dt * (st.spin * 10 + 0.5);
+        }
       }
       if (st.type === 'chill') {
+        // the tray brings a set treat up to the rim; the lid stays up while it's raised
         st.lidOpen = Math.max(0, (st.lidOpen || 0) - dt);
-        const want = st.lidOpen > 0 || (it && st.done) ? -1.15 : 0;
+        const liftTo = it && st.done ? LIFT : st.lidOpen > 0.35 && st.lift > LIFT * 0.9 ? LIFT : 0;
+        st.lift = (st.lift || 0) + (liftTo - (st.lift || 0)) * Math.min(1, dt * 3.5);
+        if (Math.abs(st.lift - liftTo) < 0.002) st.lift = liftTo;
+        b.tray.position.y = b.trayY + st.lift;
+        b.post.position.y = b.trayY + st.lift / 2;
+        b.post.scale.y = Math.max(0.001, st.lift);
+        if (it && it.obj) it.obj.position.y = it.obj.userData.y0 + st.lift;
+        const want = st.lidOpen > 0 || st.lift > 0.02 || (it && st.done) ? -1.15 : 0;
         b.lid.rotation.x += (want - b.lid.rotation.x) * Math.min(1, dt * 7);
       }
+      if (st.type === 'mix') b.contents.visible = !!it;
       if (st.type === 'decor' && S.focus?.st === st) {
         b.turntable.rotation.y += dt * 0.9;
         if (it && it.obj) it.obj.rotation.y = b.turntable.rotation.y;
@@ -1186,15 +1325,9 @@ async function start(hotData = {}) {
       if (st.hero) {
         st.bounce = Math.max(0, st.bounce - dt * 3);
         const bb = Math.sin(st.bounce * Math.PI) * 0.1;
-        const wob = working ? Math.sin(S.time * 18) * 0.02 : 0;
+        const wob = working && st.type !== 'prep' ? Math.sin(S.time * 18) * 0.02 : 0;
         const breathe = Math.sin(S.time * 2 + st.slot.x) * 0.008;
         st.hero.scale.set(1 - bb * 0.5 + wob, 1 + bb + breathe - wob, 1 - bb * 0.5 + wob);
-      }
-      if (st.face) {
-        st.blinkT -= dt;
-        if (st.blinkT < 0) st.blinkT = 2.5 + Math.random() * 3;
-        const closed = working || st.blinkT < 0.13;
-        for (const e of st.face.eyes) e.scale.y = closed ? 0.25 : 1.2;
       }
       // progress bubble over the busy appliance
       if (!st.bub && PASSIVE[st.type]) {
@@ -1227,7 +1360,7 @@ async function start(hotData = {}) {
             cls = wantsToasty(it) ? { golden: 'toasty', toasty: 'golden' }[ph] || ph : ph;
           } else if (st.type === 'cook') {
             k = st.t / stepDur(step);
-            lbl = st.stirDue ? 'Stir!' : st.done ? 'Done!' : 'Cooking…';
+            lbl = st.stirDue ? `${stirWord(st)}!` : st.done ? 'Done!' : st.cookMode === 'pan' ? 'Frying…' : st.cookMode === 'toast' ? 'Toasting…' : 'Cooking…';
             cls = st.stirDue ? 'alert' : st.done ? 'golden' : '';
           } else {
             k = st.t / stepDur(step);
@@ -1237,7 +1370,9 @@ async function start(hotData = {}) {
           st.bubFill.style.strokeDashoffset = `${(1 - clamp(k, 0, 1)) * 106.8}`;
           if (st.bubLbl.textContent !== lbl) st.bubLbl.textContent = lbl;
           st.bub.dataset.state = cls;
-          ui.project(st.bub, V3(st.slot.x, st.type === 'bake' ? 1.62 : st.slot.y + 0.6, st.slot.z), cam, 14);
+          const at = st.type === 'cook' && st.cookMode === 'pot' ? st.potTop : st.slot;
+          const y = st.type === 'bake' ? 1.62 : at.y + 0.6 + (st.type === 'chill' ? st.lift || 0 : 0);
+          ui.project(st.bub, V3(at.x, y, at.z), cam, 14);
         }
       }
     }
@@ -1248,23 +1383,57 @@ async function start(hotData = {}) {
       d.open += (d.target - d.open) * Math.min(1, dt * 7);
       d.pivot.rotation.y = d.side * 1.6 * d.open;
     }
+    updateFlyers(dt);
+  }
+
+  // little things flying between spots (a prepped pile hopping into the bowl)
+  const flyers = [];
+  function fly(obj, to, dur = 0.45, arc = 0.18, done = null) {
+    scene.attach(obj);
+    flyers.push({ obj, from: obj.position.clone(), to: to.clone(), t: 0, dur, arc, s0: obj.scale.x, done });
+  }
+  function updateFlyers(dt) {
+    for (let i = flyers.length - 1; i >= 0; i--) {
+      const f = flyers[i];
+      f.t = Math.min(1, f.t + dt / f.dur);
+      const e = ease(f.t);
+      f.obj.position.lerpVectors(f.from, f.to, e);
+      f.obj.position.y += Math.sin(f.t * Math.PI) * f.arc;
+      f.obj.scale.setScalar(f.s0 * (1 - 0.6 * f.t));
+      if (f.t >= 1) {
+        f.obj.removeFromParent();
+        flyers.splice(i, 1);
+        if (f.done) f.done();
+      }
+    }
   }
 
   // ---------------------------------------------------------------- focus mini-games
 
   function focusPose(st) {
+    const F = S.focus;
     const target = st.slot.clone();
-    if (st.type === 'mix') target.y = 1.15;
-    if (st.type === 'decor') target.y += 0.08;
+    // while prepping ingredients, frame both the cutting board and the bowl beside it
+    if (st.type === 'prep' && F && F.task && F.task.ing && st.sideSlot) target.lerp(st.sideSlot, 0.42);
+    if (st.type === 'decor') target.y += 0.1;
+    if (st.type === 'mix') target.y += 0.06;
     const away = V3(P.x - target.x, 0, P.z - target.z);
     if (away.lengthSq() < 1e-4) away.set(0, 0, 1);
     away.normalize();
-    const dist = st.type === 'mix' ? 1.1 : st.type === 'decor' ? 0.95 : 0.85;
-    const pos = target.clone().addScaledVector(away, dist).add(V3(0, 0.62, 0));
-    // look a little below the work so it sits above the mini-game card
-    const look = target.clone().add(V3(0, -0.24, 0));
-    const m = new THREE.Matrix4().lookAt(pos, look, V3(0, 1, 0));
-    return { pos, quat: new THREE.Quaternion().setFromRotationMatrix(m), fov: 55 };
+    const dist = { mix: 1.0, decor: 0.9, prep: F && F.task && F.task.ing ? 0.95 : 0.8 }[st.type] || 0.85;
+    const pos = target.clone().addScaledVector(away, dist).add(V3(0, st.type === 'prep' ? 0.56 : 0.6, 0));
+    const fov = 55;
+    const m = new THREE.Matrix4().lookAt(pos, target, V3(0, 1, 0));
+    const quat = new THREE.Quaternion().setFromRotationMatrix(m);
+    // tip the view down so the work sits in the clear space between the HUD and the mini-game card
+    const H = window.innerHeight;
+    // (layout position, so the card's wiggle animation doesn't shake the camera)
+    const el = ui.game.el;
+    const cardTop = !el.hidden && el.offsetHeight ? el.offsetTop + (el.offsetParent ? el.offsetParent.getBoundingClientRect().top : 0) : H * 0.62;
+    const yFree = clamp((70 + cardTop) / 2, H * 0.2, H * 0.5);
+    const off = Math.atan(((H / 2 - yFree) / (H / 2)) * Math.tan(THREE.MathUtils.degToRad(fov / 2)));
+    quat.multiply(new THREE.Quaternion().setFromAxisAngle(V3(1, 0, 0), -off));
+    return { pos, quat, fov };
   }
 
   function eyePose() {
@@ -1288,6 +1457,89 @@ async function start(hotData = {}) {
     return { key: `${it.step}:${step.t}`, mode: step.mode, step, title: step.label };
   }
 
+  /** Which island tool does this job. */
+  function chooseTool(task) {
+    const L = (task.title || '').toLowerCase();
+    switch (task.mode) {
+      case 'roll': return /grate|zest/.test(L) ? 'knife' : 'pin';
+      case 'swirl': return /pipe|meringue/.test(L) ? 'bag' : /peel|core/.test(L) ? 'knife' : /smooth|spread|swirl the top|dome|roll up/.test(L) ? 'spatula' : 'spoon';
+      case 'zigzag': return /drizzle|glaze/.test(L) ? 'bag' : /fold/.test(L) ? 'spatula' : /peel/.test(L) ? 'paw' : 'spoon';
+      case 'fill': return /scoop/.test(L) ? 'scoop' : 'pitcher';
+      case 'hit': return /scoop|spoon|drop|float/.test(L) ? 'scoop' : /cut|split|pit/.test(L) ? 'knife' : 'paw';
+      case 'tap': return /press|squish|sandwich|mash/.test(L) ? 'tamper' : 'knife';
+      case 'alternate': return /fork/.test(L) ? 'fork' : 'paw';
+      case 'hold': return 'paw';
+      case 'wiggle': return 'spoon';
+      default: return null;
+    }
+  }
+
+  // What's on the board, in board-local coordinates, for the tools to aim at:
+  // the ingredient being prepped, the part of the treat this step builds (at its
+  // finished size), or the batter in a bowl.
+  function refreshTarget(F) {
+    const st = F.st;
+    const it = F.it;
+    const live = !F.ingObj && it.live;
+    const obj = F.ingObj || live || it.obj;
+    if (!obj) return;
+    let saved = null;
+    if (live) {
+      saved = [live.scale.clone(), live.position.clone()];
+      live.scale.set(1, 1, 1);
+      if (live.userData.y0 !== undefined) live.position.y = live.userData.y0;
+    }
+    // parents first: a treat that was only just placed hasn't been rendered yet
+    obj.updateWorldMatrix(true, true);
+    const box = new THREE.Box3().setFromObject(obj);
+    if (saved) {
+      live.scale.copy(saved[0]);
+      live.position.copy(saved[1]);
+      live.updateWorldMatrix(false, true);
+    }
+    if (box.isEmpty()) return;
+    const c = box.getCenter(V3());
+    let topY = box.max.y;
+    let reach = Math.max(box.max.x - box.min.x, box.max.z - box.min.z) * 0.5;
+    if (!F.ingObj && it.look && it.look.kind === 'bowl') {
+      // work the batter inside the bowl, not its rim
+      topY = box.min.y + (box.max.y - box.min.y) * 0.62;
+      reach *= 0.62;
+    }
+    F.target = st.group.worldToLocal(V3(c.x, topY, c.z));
+    F.baseY = st.group.worldToLocal(V3(c.x, box.min.y, c.z)).y;
+    // layers that grow or rise get worked at their current height, not their finished one
+    F.growing = !!live && (live.userData.style === 'grow' || live.userData.style === 'rise');
+    F.reach = Math.max(0.04, reach);
+    F.height = box.max.y - box.min.y;
+  }
+
+  // board directions of screen-right and screen-down for the close-up camera
+  function screenAxes(st) {
+    const pose = focusPose(st);
+    const right = V3(1, 0, 0).applyQuaternion(pose.quat).setY(0).normalize();
+    const fwd = V3(0, 0, -1).applyQuaternion(pose.quat).setY(0).normalize();
+    const inv = st.group.getWorldQuaternion(new THREE.Quaternion()).invert();
+    return { ax: right.applyQuaternion(inv), ay: fwd.negate().applyQuaternion(inv) };
+  }
+
+  // the bowl waits beside the board on the side away from you when you work from its end
+  function chooseSide(st) {
+    if (!st.sideSlots) return;
+    const [a, b] = st.sideSlots;
+    st.sideSlot = P.distanceToSquared(a) < P.distanceToSquared(b) - 0.3 ? b : a;
+  }
+
+  function resetTools(st) {
+    for (const [k, t] of Object.entries(st.tools || st.built.tools || {})) {
+      const rest = t.userData.rest;
+      t.position.copy(rest.p);
+      t.rotation.copy(rest.r);
+      t.scale.setScalar(1);
+      if (k !== 'pin' && k !== 'knife' && (st.type === 'prep')) t.visible = false;
+    }
+  }
+
   function setupFocus(st, it) {
     const task = focusTask(st, it);
     let game = null;
@@ -1301,42 +1553,97 @@ async function start(hotData = {}) {
       }
       game = it.work && it.work.key === task.key ? it.work.game : createGame(task.mode, task.step, opts);
     }
-    S.focus = { st, it, task, step: task.step, mode: task.mode, game, idx: it.decorIdx || 0, doneT: 0, mistakes: 0, ingObj: null };
+    S.focus = { st, it, task, step: task.step, mode: task.mode, game, idx: it.decorIdx || 0, doneT: 0, mistakes: 0, ingObj: null, pile: null, tool: null, chop: 0, rollPos: 0, pop: 0, side: 1, refreshT: 0 };
     const F = S.focus;
-    if (task.ing) {
-      // show the whole ingredient on the cutting board while you prep it
-      const m = prepModel(task.ing);
-      const box = new THREE.Box3().setFromObject(m);
-      const size = box.getSize(V3());
-      m.scale.setScalar(Math.min(1.3, 0.2 / Math.max(size.x, size.y, size.z, 0.01)));
-      m.position.copy(st.group.localToWorld(V3(-0.17, 0.035, 0.1)));
-      m.userData.baseScale = m.scale.x;
-      scene.add(m);
-      F.ingObj = m;
+    if (st.type === 'prep') {
+      resetTools(st);
+      F.tool = chooseTool(task);
+      if (F.tool) st.tools[F.tool].visible = true;
+      Object.assign(F, screenAxes(st));
+      // the bowl moves beside the board while ingredients are prepped; recipe steps build the treat live
+      if (task.ing) chooseSide(st);
+      placeItem(it);
+      if (task.ing) {
+        const m = prepModel(task.ing);
+        const box = new THREE.Box3().setFromObject(m);
+        const size = box.getSize(V3());
+        const s0 = Math.min(1.3, 0.2 / Math.max(size.x, size.y, size.z, 0.01));
+        m.scale.setScalar(s0);
+        const c = box.getCenter(V3());
+        // the whole ingredient sits a little left of center; its prepped pile grows to the right
+        const spot = V3(0, 0.036, 0).addScaledVector(F.ax, -0.05);
+        m.position.copy(st.group.localToWorld(V3(spot.x - c.x * s0, spot.y - box.min.y * s0, spot.z - c.z * s0)));
+        m.userData.s0 = s0;
+        scene.add(m);
+        F.ingObj = m;
+        const pile = bitPile(task.ing);
+        const pp = V3(0, 0.036, 0).addScaledVector(F.ax, 0.19).addScaledVector(F.ay, -0.07);
+        pile.position.set(clamp(pp.x, -0.27, 0.27), 0.036, clamp(pp.z, -0.17, 0.17));
+        pile.userData.s0 = 1.6;
+        pile.scale.setScalar(0.01);
+        st.built.props.add(pile);
+        F.pile = pile;
+      }
+      refreshTarget(F);
+      if (F.tool === 'pitcher') {
+        // a thin stream from the spout while you pour
+        const col = task.ing ? bitColor(task.ing) : it.d.batter || '#F3D9A6';
+        const stream = mk(G.cyl(0.008, 0.006, 1, 0.003, 10), toon(col), { outline: 'thin', cast: false });
+        stream.visible = false;
+        st.built.props.add(stream);
+        F.stream = stream;
+      }
     }
-    if (st.type === 'mix') st.built.batterMat.color.set(it.d.batter);
+    if (st.type === 'mix') setupMixer(st, it, task);
+    if (st.type === 'decor') placeItem(it);
     ui.showGame({
       station: `${st.name} · ${it.d.name}`,
       title: task.title,
       hint: task.ing ? `${ING_BY_ID[task.ing].name} for the ${it.d.name}. ${MODE_HINT[task.mode]}` : MODE_HINT[task.mode],
       mode: task.mode,
       tapLabel: task.step.tapLabel || TAP_LABEL[task.mode] || 'Tap!',
-      decor: task.mode === 'decor' ? { tops: step0(it).tops, idx: F.idx } : null,
+      decor: task.mode === 'decor' ? { tops: curStep(it).tops, idx: F.idx } : null,
       game,
     });
-    if (!game) ui.setGameProgress(F.idx / step0(it).tops.length);
+    if (!game) ui.setGameProgress(F.idx / curStep(it).tops.length);
   }
-  const step0 = (it) => curStep(it);
+
+  // The stand mixer: pick the attachment, fill the bowl with what you gathered.
+  function setupMixer(st, it, task) {
+    const b = st.built;
+    const att = task.mode === 'tap' ? 'hook' : task.mode === 'zigzag' ? 'paddle' : 'whisk';
+    for (const [k, g] of Object.entries(b.attach)) g.visible = k === att;
+    const ids = it.steps.slice(0, it.step).filter((s) => s.t === 'gather').flatMap((s) => s.items);
+    const cols = ids.map(bitColor);
+    const avg = new THREE.Color(0, 0, 0);
+    for (const c of cols) avg.add(new THREE.Color(c));
+    if (cols.length) avg.multiplyScalar(1 / cols.length);
+    st.mixFrom = cols.length ? '#' + avg.getHexString() : '#F3D9A6';
+    st.mixTo = it.d.batter;
+    b.batterMat.color.set(st.mixFrom);
+    b.surface.visible = att !== 'hook';
+    b.dough.visible = att === 'hook';
+    b.dough.scale.set(1, 0.75, 1);
+    b.bits.clear();
+    ids.forEach((id, i) => {
+      const a = i * 2.39996, d = 0.035 + (i % 3) * 0.035;
+      const chunk = mk(G.sphere(0.018 + (i % 2) * 0.006, 12, 8), bitColor(id), { outline: 'thin', cast: false });
+      chunk.position.set(Math.cos(a) * d, 0.012, Math.sin(a) * d);
+      chunk.scale.y = 0.7;
+      b.bits.add(chunk);
+    });
+  }
 
   function enterFocus(st) {
     S.mode = 'focus';
+    fx.scale = 0.45;
     setTarget(null);
     ui.prompt(null);
     vm.visible = false;
     input.dragLook = false;
     input.consumeMove();
-    tweenCam('focus');
     setupFocus(st, st.item);
+    tweenCam('focus');
     tip('focus', 'Press Q or "Step back" to leave a station. Your progress is saved.');
   }
 
@@ -1345,35 +1652,61 @@ async function start(hotData = {}) {
       F.ingObj.removeFromParent();
       F.ingObj = null;
     }
+    if (F.pile && F.pile.parent === F.st.built.props) {
+      F.pile.removeFromParent();
+      F.pile = null;
+    }
+    if (F.stream) {
+      F.stream.removeFromParent();
+      F.stream = null;
+    }
   }
 
   function leaveFocus() {
     const F = S.focus;
     if (!F) return;
-    if (F.doneT <= 0 && F.it.station === F.st) {
+    // a topping still on its way lands now, and a step that just finished hands the treat back
+    if (F.pendingTop !== undefined && F.pendingTop !== null) {
+      F.pendingTop = null;
+      if (F.idx >= F.step.tops.length) completeFocus();
+    }
+    F.st.toolAnim = null;
+    if (F.doneT > 0 && !(F.task.ing && F.it.raw.size)) {
+      F.doneT = 0;
+      F.finished = true;
+      finishFocus();
+      return;
+    }
+    if (F.doneT <= 0 && !F.finished && F.it.station === F.st) {
       F.it.work = F.game ? { key: F.task.key, game: F.game } : null;
       F.it.decorIdx = F.idx;
     }
     clearIngObj(F);
     S.focus = null;
     S.mode = 'play';
+    fx.scale = 1;
     ui.hideGame();
     vm.visible = true;
     input.dragLook = true;
     tweenCam('eye');
-    if (F.st.type === 'mix') F.st.built.batterMat.color.set('#FFE08A');
+    if (F.st.type === 'prep' || F.st.type === 'decor') resetTools(F.st);
+    // the treat goes back to its resting look (no half-built live parts)
+    if (F.it.station === F.st && F.it.where === 'station') placeItem(F.it);
   }
 
   /** Sounds, sparkles and toasts for mini-game events. */
   function handleEvents(F, events) {
     const st = F.st;
-    const at = st.slot.clone().setY(st.slot.y + 0.1);
+    const at = (F.ingObj ? F.ingObj.position : st.slot).clone().setY(st.slot.y + 0.1);
     for (const e of events) {
       if (e.type === 'stroke') {
-        if (st.type === 'mix') { sfx.whisk(); fx.puff(at.clone().setY(at.y + 0.1), 1, 0.15); }
-        else if (F.mode === 'tap' || F.mode === 'hit') { sfx.chop(); st.chop = 1; fx.puff(at, 2, 0.18); }
-        else if (F.mode === 'alternate' || F.mode === 'order') { sfx.place(); st.chop = 0.6; fx.puff(at, 2, 0.15); }
+        if (st.type === 'mix') { sfx.whisk(); fx.puff(st.slot.clone().setY(st.slot.y + 0.08), 1, 0.15); }
+        else if (F.mode === 'tap' || F.mode === 'hit') { sfx.chop(); fx.puff(at, 2, 0.16); }
+        else if (F.mode === 'alternate' || F.mode === 'order') { sfx.place(); fx.puff(at, 2, 0.14); }
         else sfx.whisk();
+        F.chop = 1;
+        F.side = -F.side;
+        if (F.mode === 'roll' || F.mode === 'wiggle') F.rollPos = F.side * (F.reach || 0.1) * 0.6;
         st.whiskBoost = 1;
         if (F.ingObj) F.ingObj.userData.squash = 1;
       } else if (e.type === 'hit') {
@@ -1414,8 +1747,9 @@ async function start(hotData = {}) {
 
   function focusAlt(side) {
     const F = S.focus;
-    if (!F || F.doneT > 0 || F.mode !== 'alternate') return;
-    handleEvents(F, F.game.alt(side));
+    if (!F || F.doneT > 0) return;
+    if (F.mode === 'alternate') handleEvents(F, F.game.alt(side));
+    else if (F.mode === 'zigzag' && F.game.key) handleEvents(F, F.game.key(side));
   }
 
   function pickLayer(label) {
@@ -1425,6 +1759,9 @@ async function start(hotData = {}) {
     handleEvents(F, F.game.pick(label));
   }
 
+  // which decorating tool lays down each topping
+  const TOP_TOOL = { whipped: 'bag', frosting: 'bag', glaze: 'bag', pink: 'pink', sprinkles: 'shaker', powdered: 'sugar', fudge: 'fudge', caramel: 'caramel', cherry: 'cherries', strawberry: 'cherries', nuts: 'nuts', shavings: 'spatula' };
+
   function selectTopping(id) {
     const F = S.focus;
     if (!F || F.mode !== 'decor' || F.doneT > 0) return;
@@ -1432,13 +1769,13 @@ async function start(hotData = {}) {
     const want = tops[F.idx];
     if (id === want) {
       F.idx += 1;
+      F.it.decorIdx = F.idx;
       sfx.pop();
-      fx.sparkles(F.st.slot.clone().setY(F.st.slot.y + 0.2), 6, 0.25);
-      fx.puff(F.st.slot.clone().setY(F.st.slot.y + 0.15), 3, 0.2);
+      F.st.toolAnim = { key: TOP_TOOL[id], t: 0 };
+      F.pendingTop = 0.38;
       ui.renderSeq(tops, F.idx);
       ui.setGameProgress(F.idx / tops.length);
       ui.toast(`${TOPPING_BY_ID[id].name} added!`, 'good');
-      if (F.idx >= tops.length) completeFocus();
     } else {
       F.mistakes += 1;
       F.it.mistakes += 1;
@@ -1448,20 +1785,41 @@ async function start(hotData = {}) {
     }
   }
 
+  // the topping lands while the tool is over the treat
+  function landTopping(F) {
+    placeItem(F.it);
+    F.pop = 1;
+    fx.sparkles(F.st.slot.clone().setY(F.st.slot.y + 0.2), 6, 0.25);
+    fx.puff(F.st.slot.clone().setY(F.st.slot.y + 0.15), 3, 0.2);
+    if (F.idx >= F.step.tops.length) completeFocus();
+  }
+
   function completeFocus() {
     const F = S.focus;
     if (!F || F.doneT > 0) return;
     const it = F.it;
-    F.doneT = 0.75;
+    F.doneT = 0.85;
+    F.finished = true;
     if (F.mode === 'decor' && F.mistakes >= 2) it.stars = Math.max(1, it.stars - 1);
     it.work = null;
     it.decorIdx = 0;
     let msg = F.mode === 'decor' ? 'Beautiful!' : 'Done!';
     if (F.task.ing) {
-      it.raw.delete(F.task.ing);
-      msg = `${ING_BY_ID[F.task.ing].name}: ready!`;
+      const ing = F.task.ing;
+      it.raw.delete(ing);
+      msg = `${ING_BY_ID[ing].name}: ready!`;
       if (F.ingObj) fx.puff(F.ingObj.position.clone(), 4, 0.2);
-      clearIngObj(F);
+      if (F.ingObj) { F.ingObj.removeFromParent(); F.ingObj = null; }
+      // the prepped pile hops into the bowl
+      const st = F.st;
+      if (F.pile) {
+        const pile = F.pile;
+        F.pile = null;
+        fly(pile, st.sideSlot.clone().add(V3(0, 0.07, 0)), 0.45, 0.16, () => {
+          sfx.pop();
+          fx.puff(st.sideSlot.clone().add(V3(0, 0.1, 0)), 2, 0.15);
+        });
+      }
       const step = curStep(it);
       if (!it.raw.size && step.items.every((id) => it.got.has(id))) finishGather(it);
     } else {
@@ -1478,6 +1836,7 @@ async function start(hotData = {}) {
     const it = F.it;
     // more ingredients to prep: stay at the island and start the next one
     if (F.task.ing && it.raw.size) {
+      clearIngObj(F);
       setupFocus(F.st, it);
       return;
     }
@@ -1488,13 +1847,210 @@ async function start(hotData = {}) {
     ui.toast(`${it.d.name}: ${isDone(it) ? `ready to serve${it.ticket ? ` ${it.ticket.customer.name}` : ''}!` : `next, ${nextStepText(it)}.`}`, 'good');
   }
 
+  const lerpTo = (o, p, k) => o.position.lerp(p, k);
+  const AX = V3(1, 0, 0), AY = V3(0, 1, 0), AZ = V3(0, 0, 1);
+  const qTmp = new THREE.Quaternion();
+  // a tool's pose: turn to a heading, then tip it about its own axes
+  function toolQuat(out, yaw, ...tips) {
+    out.setFromAxisAngle(AY, yaw);
+    for (const [axis, ang] of tips) out.multiply(qTmp.setFromAxisAngle(axis, ang));
+    return out;
+  }
+  // headings that point a tool's own +x (or +z) along a board direction
+  const yawX = (d) => Math.atan2(-d.z, d.x);
+  const yawZ = (d) => Math.atan2(d.x, d.z);
+
+  // Island tools follow your input, worked out in screen terms so they move the
+  // way your mouse does from wherever you stand: the knife chops where the slider
+  // is, the pin rolls under the mouse, the piping bag and spoon trace your circles,
+  // the pitcher tips while you hold.
+  function animateIslandTools(F, dt, mv, held) {
+    const st = F.st;
+    const tl = st.tools;
+    const g = F.game;
+    if (!F.target || !F.tool || !g) return;
+    const T = F.target, R = F.reach, k = clamp(g.progress, 0, 1);
+    const ax = F.ax, ay = F.ay; // board directions of screen-right and screen-down (toward you)
+    const away = ay.clone().negate();
+    const t = tl[F.tool];
+    const want = V3();
+    const q = new THREE.Quaternion();
+    const Ty = F.growing ? F.baseY + (T.y - F.baseY) * Math.max(0.15, k) : T.y;
+    const at = (u, v, h) => want.copy(T).addScaledVector(ax, u).addScaledVector(ay, v).setY(Ty + h);
+    const dirAt = (a) => ax.clone().multiplyScalar(Math.cos(a)).addScaledVector(ay, Math.sin(a));
+    const a = g.angle || 0;
+    const sweep = (g.sweepPos || 0) * R * 0.8;
+    F.chop = Math.max(0, F.chop - dt * 6);
+    F.rollPos = clamp((F.rollPos || 0) + mv.dy * 0.0011, -R * 0.75, R * 0.75);
+    switch (F.tool) {
+      case 'knife': {
+        if (F.mode === 'swirl') {
+          // a paring knife working round the fruit
+          const d = dirAt(a);
+          want.copy(T).addScaledVector(d, R * 0.92).setY(T.y - F.height * 0.4);
+          toolQuat(q, yawX(dirAt(a + Math.PI / 2)), [AX, Math.PI / 2], [AY, -0.25]);
+        } else if (F.mode === 'roll') {
+          // zesting: the blade scrapes back and forth over the top
+          at(F.rollPos * 0.8, 0, 0.012);
+          toolQuat(q, yawX(away), [AY, -0.15]);
+        } else {
+          // chopping: side-on to you, edge down, the handle lifting between cuts
+          const u = F.mode === 'hit' ? (g.needle - 0.5) * 2 * R * 0.85 : Math.sin(g.count * 2.1) * R * 0.5;
+          at(u + 0.07, 0, 0.027 + 0.035 * (1 - F.chop));
+          toolQuat(q, yawX(ax.clone().negate()), [AX, Math.PI / 2], [AY, -0.3 * (1 - F.chop)]);
+        }
+        break;
+      }
+      case 'pin': {
+        // the pin lies across your view and rolls toward and away from you
+        at(0, F.rollPos, 0.034);
+        toolQuat(q, yawX(ax), [AX, -F.rollPos / 0.034]);
+        break;
+      }
+      case 'bag': {
+        // leaning away from you so you can see the tip meet the treat
+        const lean = qTmp.setFromAxisAngle(ax, -0.45).clone();
+        if (F.mode === 'zigzag') {
+          at(sweep, Math.sin(S.time * 3) * R * 0.25, 0.03);
+          q.setFromAxisAngle(ay, -(g.sweepPos || 0) * 0.35).multiply(lean);
+        } else {
+          const rr = R * 0.55 * (1 - k * 0.8);
+          want.copy(T).addScaledVector(dirAt(a), rr).setY(Ty + 0.02);
+          q.setFromAxisAngle(dirAt(a + Math.PI / 2), 0.2).multiply(lean);
+        }
+        break;
+      }
+      case 'spatula': case 'spoon': {
+        // the handle comes toward you, like you're holding it
+        const tilt = F.tool === 'spatula' ? 0.35 : 0.15;
+        if (F.mode === 'zigzag') {
+          at(sweep, 0, 0.02);
+          toolQuat(q, yawZ(away) + (g.sweepPos || 0) * 0.5, [AX, tilt]);
+        } else if (F.mode === 'wiggle') {
+          const w = S.time * 7;
+          const r = R * 0.4 * Math.min(1, 0.3 + (F.activity || 0));
+          want.copy(T).addScaledVector(dirAt(w), r).setY(Ty + 0.02);
+          toolQuat(q, yawZ(away) + Math.sin(w) * 0.3, [AX, tilt]);
+        } else {
+          want.copy(T).addScaledVector(dirAt(a), R * 0.45).setY(Ty + 0.015);
+          toolQuat(q, yawZ(dirAt(a + Math.PI / 2)), [AX, tilt]);
+        }
+        break;
+      }
+      case 'scoop': {
+        const u = F.mode === 'hit' ? (g.needle - 0.5) * 2 * R * 0.8 : 0;
+        const dip = F.mode === 'fill' ? (held ? 0.5 + 0.5 * Math.sin(S.time * 8) : 0) : F.chop;
+        at(u, 0, 0.07 - dip * 0.035);
+        toolQuat(q, yawZ(away), [AX, dip * 0.9]);
+        break;
+      }
+      case 'pitcher': {
+        // stands to your left of the treat and tips its spout over the middle
+        F.tilt = (F.tilt || 0) + ((held ? 1 : 0) - (F.tilt || 0)) * Math.min(1, dt * 8);
+        at(-0.16, 0, 0.1);
+        toolQuat(q, yawX(ax), [AZ, -F.tilt * 1.1]);
+        if (F.stream) {
+          const spout = V3(0.075, 0.14, 0).applyQuaternion(t.quaternion).add(t.position);
+          const drop = Math.max(0.01, spout.y - Ty);
+          F.stream.visible = F.tilt > 0.6;
+          F.stream.position.set(spout.x, spout.y - drop / 2, spout.z);
+          F.stream.scale.set(1, drop, 1);
+        }
+        break;
+      }
+      case 'tamper': {
+        at(Math.sin(g.count * 2.4) * R * 0.4, Math.cos(g.count * 1.7) * R * 0.3, 0.003 + 0.05 * (1 - F.chop));
+        break;
+      }
+      case 'fork': {
+        // crisscross: the fork presses in at alternating angles
+        const side = g.expect === 'L' ? 1 : -1;
+        at(side * R * 0.3, 0, 0.004 + 0.03 * (1 - F.chop));
+        toolQuat(q, yawZ(away) + side * 0.78, [AX, 0.12]);
+        break;
+      }
+      case 'paw': default: {
+        // works from the edge nearest you: laying strips, peeling, pressing
+        const side = F.mode === 'alternate' ? (g.expect === 'L' ? 1 : -1) : F.mode === 'zigzag' ? (g.sweepPos || 0) : Math.sin(g.count * 2.3) * 0.5;
+        const press = F.mode === 'hold' ? (held ? 0.7 + Math.sin(S.time * 14) * 0.15 : 0) : F.chop;
+        at(side * R * 0.6, R * 0.55, 0.035 - press * 0.03);
+        toolQuat(q, yawZ(away), [AX, 0.3 + press * 0.3]);
+      }
+    }
+    const s = Math.min(1, dt * 14);
+    lerpTo(t, want, s);
+    t.quaternion.slerp(q, s);
+    // a paring-sized knife for peeling and zesting, a small piping bag
+    const size = F.tool === 'knife' && (F.mode === 'swirl' || F.mode === 'roll') ? 0.7 : F.tool === 'bag' ? 0.6 : F.tool === 'paw' ? 0.72 : 1;
+    t.scale.setScalar(size);
+    // the resting pin and knife stay put when they aren't the tool in use
+    for (const key of ['pin', 'knife']) {
+      if (key === F.tool) continue;
+      const rest = tl[key].userData.rest;
+      lerpTo(tl[key], rest.p, Math.min(1, dt * 10));
+      tl[key].quaternion.slerp(qTmp.setFromEuler(rest.r), Math.min(1, dt * 10));
+    }
+  }
+
+  // decorating tools hop over the treat, shake/pipe/drizzle, and hop back
+  function animateDecorTools(F, dt) {
+    const st = F.st;
+    const A = st.toolAnim;
+    const tools = st.built.tools;
+    if (!A || !tools[A.key]) return;
+    const t = tools[A.key];
+    A.t = Math.min(1, A.t + dt / 0.95);
+    const rest = t.userData.rest;
+    const over = st.group.worldToLocal(st.slot.clone().add(V3(0, (F.it.obj ? F.it.obj.userData.top - st.slot.y : 0.12) + 0.1, 0)));
+    let p, r = rest.r.clone();
+    if (A.t < 0.3) p = rest.p.clone().lerp(over, ease(A.t / 0.3));
+    else if (A.t < 0.75) {
+      p = over.clone();
+      const w = (A.t - 0.3) / 0.45;
+      if (A.key === 'shaker' || A.key === 'sugar') { r.set(Math.PI * 0.85, 0, Math.sin(w * 30) * 0.25); p.y += 0.06; }
+      else if (A.key === 'cherries' || A.key === 'nuts') { r.set(0, 0, 0.9 * Math.sin(w * Math.PI)); }
+      else if (A.key === 'spatula') { r.set(0, w * 6, 0); p.y -= 0.05; }
+      else { r.set(Math.PI * 0.9, 0, Math.sin(w * Math.PI * 4) * 0.2); p.y += 0.12; }
+      p.x += Math.sin(w * Math.PI * 2) * 0.05;
+    } else p = over.clone().lerp(rest.p, ease((A.t - 0.75) / 0.25));
+    t.position.copy(p);
+    t.rotation.copy(A.t >= 0.999 ? rest.r : r);
+    if (A.t >= 1) st.toolAnim = null;
+  }
+
+  function updateMixer(F, dt, mv, activity) {
+    const b = F.st.built;
+    const k = F.game ? clamp(F.game.progress, 0, 1) : 0;
+    b.beater.rotation.y += dt * (2.5 + activity * 26);
+    // planetary wobble around the bowl
+    const w = S.time * 3.5;
+    b.beater.position.x = 0.1 + Math.cos(w) * 0.02 * Math.min(1, activity + 0.2);
+    b.beater.position.z = Math.sin(w) * 0.02 * Math.min(1, activity + 0.2);
+    b.batterMat.color.copy(mixCol(F.st.mixFrom, F.st.mixTo, k * 1.15));
+    b.surface.position.y = 0.09 + k * 0.025;
+    b.swirlRing.visible = k > 0.15 && k < 0.98 && b.surface.visible;
+    b.swirlRing.rotation.z += dt * (1 + activity * 8);
+    b.swirlMat.color.copy(mixCol(F.st.mixTo, '#FFFBF0', 0.35));
+    b.bits.children.forEach((ch, i) => {
+      const s = Math.max(0.01, 1 - k * 1.4 + (i % 3) * 0.05);
+      ch.scale.set(s, s * 0.7, s);
+      ch.position.y = 0.012 + k * 0.02;
+    });
+    b.bits.rotation.y += dt * (0.5 + activity * 4);
+    if (b.dough.visible) {
+      F.chop = Math.max(0, F.chop - dt * 5);
+      const sq = Math.sin(F.chop * Math.PI) * 0.25;
+      b.dough.scale.set(1 + sq, 0.75 * (1 - sq) + k * 0.15, 1 + sq);
+    }
+  }
+
   function updateFocus(dt) {
     const F = S.focus;
     if (!F) return;
     const st = F.st;
-    const b = st.built;
     if (F.doneT > 0) {
       F.doneT -= dt;
+      if (st.type === 'decor') animateDecorTools(F, dt);
       if (F.doneT <= 0) finishFocus();
       return;
     }
@@ -1505,29 +2061,60 @@ async function start(hotData = {}) {
       if (S.focus !== F || F.doneT > 0) return;
       ui.renderMini(F.game);
     }
-    // props react to the work
     st.whiskBoost = Math.max(0, (st.whiskBoost || 0) - dt * 3);
     const activity = Math.min(1, mv.amt / 40 + st.whiskBoost + (held && (F.mode === 'hold' || F.mode === 'fill') ? 0.6 : 0));
-    if (st.type === 'mix') {
-      b.whisk.rotation.y += dt * (2 + activity * 30);
-      b.whisk.position.x = 0.1 + Math.sin(S.time * 9) * 0.05 * activity;
+    const it = F.it;
+    // the treat grows the part this step adds
+    if (it.live) {
+      featureProgress(it.live, F.game ? F.game.progress : 0);
+      featureTick(it.live, dt);
     }
+    if (it.obj && it.obj.userData.flip) {
+      const wantRot = Math.PI * (1 - clamp(F.game ? F.game.progress : 0, 0, 1));
+      it.obj.rotation.x += (wantRot - it.obj.rotation.x) * Math.min(1, dt * 6);
+    }
+    if (st.type === 'mix') updateMixer(F, dt, mv, activity);
     if (st.type === 'prep') {
-      st.chop = Math.max(0, (st.chop || 0) - dt * 5);
-      if (F.mode === 'roll') st.pin.position.z = -0.12 + Math.sin(F.game.progress * 30) * 0.08;
-      st.knife.rotation.z = st.chop * 0.7;
-      st.knife.position.y = 0.04 + st.chop * 0.06;
-      if (F.mode === 'wiggle' || F.mode === 'hold' || F.mode === 'fill' || F.mode === 'swirl') st.pin.rotation.x += dt * activity * 12;
-      if (F.it.obj && (F.mode === 'wiggle' || F.mode === 'swirl')) F.it.obj.rotation.y += dt * activity * 4;
+      F.activity = activity;
+      F.refreshT -= dt;
+      if (F.ingObj && F.refreshT <= 0) {
+        refreshTarget(F);
+        F.refreshT = 0.2;
+      }
+      animateIslandTools(F, dt, mv, held);
+      if (F.ingObj) {
+        // the whole ingredient shrinks as its prepped pile grows
+        const o = F.ingObj;
+        o.userData.squash = Math.max(0, (o.userData.squash || 0) - dt * 5);
+        const k = F.game ? clamp(F.game.progress, 0, 1) : 0;
+        const s0 = o.userData.s0;
+        const sq = Math.sin(o.userData.squash * Math.PI) * 0.16;
+        const shrink = 1 - k * 0.6;
+        o.scale.set(s0 * (1 + sq) * shrink, s0 * (1 - sq) * shrink, s0 * (1 + sq) * shrink);
+        if (F.mode === 'swirl' || F.mode === 'roll') o.rotation.y += dt * activity * 4;
+        if (F.pile) {
+          const ps = F.pile.userData.s0 * (0.15 + 0.85 * k);
+          F.pile.scale.setScalar(k > 0.02 ? ps : 0.01);
+        }
+      }
     }
-    if (F.ingObj) {
-      const o = F.ingObj;
-      o.userData.squash = Math.max(0, (o.userData.squash || 0) - dt * 5);
-      const k = o.userData.baseScale;
-      const sq = Math.sin(o.userData.squash * Math.PI) * 0.18;
-      const shrink = F.game ? 1 - F.game.progress * 0.35 : 1;
-      o.scale.set(k * (1 + sq) * shrink, k * (1 - sq) * shrink, k * (1 + sq) * shrink);
-      if (F.mode === 'swirl' || F.mode === 'roll') o.rotation.y += dt * activity * 5;
+    if (st.type === 'decor') {
+      animateDecorTools(F, dt);
+      if (F.pendingTop !== undefined && F.pendingTop !== null) {
+        F.pendingTop -= dt;
+        if (F.pendingTop <= 0) {
+          F.pendingTop = null;
+          landTopping(F);
+          if (S.focus !== F || F.doneT > 0) return;
+        }
+      }
+      if (it.obj && F.pop > 0) {
+        F.pop = Math.max(0, F.pop - dt * 3);
+        const b = 1 + Math.sin(F.pop * Math.PI) * 0.12;
+        const s = it.obj.userData.s || it.obj.scale.x;
+        it.obj.userData.s = s;
+        it.obj.scale.set(s * b, s / b, s * b);
+      }
     }
     const cursor = F.mode === 'decor' || F.mode === 'order' || F.mode === 'alternate';
     ui.vcursor(cursor && input.locked, input.cursor.x, input.cursor.y);
@@ -1618,8 +2205,8 @@ async function start(hotData = {}) {
       const F = S.focus;
       if (k === 'e' || k === ' ' || k === 'enter') focusTap();
       else if (k === 'q' || k === 'backspace' || k === 'escape') leaveFocus();
-      else if (F && F.mode === 'alternate' && (k === 'a' || k === 'arrowleft')) focusAlt('L');
-      else if (F && F.mode === 'alternate' && (k === 'd' || k === 'arrowright')) focusAlt('R');
+      else if (F && (F.mode === 'alternate' || F.mode === 'zigzag') && (k === 'a' || k === 'arrowleft')) focusAlt('L');
+      else if (F && (F.mode === 'alternate' || F.mode === 'zigzag') && (k === 'd' || k === 'arrowright')) focusAlt('R');
       else if (F && F.mode === 'order' && k >= '1' && k <= '9') {
         const l = F.game.choices[+k - 1];
         if (l) pickLayer(l);
@@ -1875,6 +2462,9 @@ async function start(hotData = {}) {
       cam.position.copy(pos);
       cam.fov = titleFov();
       cam.lookAt(target);
+      // the diorama is ~72 m away: a tight near/far keeps depth precise so nothing flickers
+      cam.near = TITLE_DIST - 22;
+      cam.far = TITLE_DIST + 30;
       cam.layers.set(0);
       outlineUniforms.distRef.value = 1e6;
     } else if (S.mode === 'swoop') {
@@ -1884,6 +2474,9 @@ async function start(hotData = {}) {
       cam.position.lerpVectors(S.swoop.from.pos, to.pos, e);
       cam.quaternion.slerpQuaternions(S.swoop.from.quat, to.quat, e);
       cam.fov = S.swoop.from.fov + (to.fov - S.swoop.from.fov) * e;
+      const away = cam.position.distanceTo(ROOM_CENTER);
+      cam.near = clamp(away - 16, 0.05, TITLE_DIST - 22);
+      cam.far = Math.max(200, away + 30);
       outlineUniforms.distRef.value = 80 + (2.4 - 80) * e;
       if (e > 0.94) cam.layers.enable(FP_LAYER);
       fox.root.visible = e < 0.86;
@@ -1896,6 +2489,8 @@ async function start(hotData = {}) {
       }
     } else {
       fox.root.visible = false;
+      cam.near = 0.05;
+      cam.far = 200;
       outlineUniforms.distRef.value = 2.4;
       const bob = moving ? Math.sin(bobPhase * 2) * 0.007 : 0;
       if (S.camTween) {
@@ -1940,7 +2535,7 @@ async function start(hotData = {}) {
     cam.updateMatrixWorld();
   }
   window.__bakery = {
-    S, W, renderer, stations, cam, input, ui, vm, P,
+    S, W, renderer, stations, cam, input, ui, vm, P, fx, placeItem,
     setView: (x, z, y, p) => { P.set(x, 0, z); yaw = y; if (p !== undefined) pitch = p; },
     lookAt: (x, y, z) => {
       const dx = x - P.x, dz = z - P.z;
