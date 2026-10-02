@@ -178,7 +178,7 @@ async function start(hotData = {}) {
   let aspect = 1;
   const fpFov = () => (aspect < 1 ? 80 : 72);
   const titleFov = () => {
-    const halfV = aspect > 1.25 ? Math.max(7.8, 14.5 / aspect) : Math.max(9.5, 9.2 / aspect);
+    const halfV = (aspect > 1.25 ? Math.max(7.8, 14.5 / aspect) : Math.max(9.5, 9.2 / aspect)) * (W.title && aspect > 1.25 ? W.title.zoom : 1);
     return THREE.MathUtils.radToDeg(2 * Math.atan(halfV / TITLE_DIST));
   };
 
@@ -262,7 +262,7 @@ async function start(hotData = {}) {
 
   // ---------------------------------------------------------------- items
 
-  const isFryStep = (s) => !!s && s.t === 'cook' && /fry|oil|sear/i.test(s.label);
+  const isFryStep = (s) => !!s && s.t === 'cook' && /fry|sear|\boil\b/i.test(s.label);
   const isToastStep = (s) => !!s && s.t === 'cook' && /toast/i.test(s.label);
   const COOK_COLORS = [
     [/cherr/i, '#C8384A'], [/peach/i, '#F6A55A'], [/custard|curd/i, '#FFE066'], [/hot fudge|fudge|cocoa|chocolate/i, '#5A3422'],
@@ -317,7 +317,8 @@ async function start(hotData = {}) {
       tops,
       raw: rest.some((s) => s.t === 'bake' || s.t === 'cook'),
       burnt,
-      noPlate: !!st && (st.type === 'bake' || (st.type === 'cook' && isFryStep(cur))),
+      // in a pan or on an oven tray; in the restaurant, raw food is prepped on the board and only plated once it's cooked
+      noPlate: (!!st && (st.type === 'bake' || (st.type === 'cook' && isFryStep(cur)))) || (IS_RESTAURANT && rest.some((s) => s.t === 'bake' || s.t === 'cook')),
       flip: !!F && !F.task.ing && !!cur && cur.fx === 'flip',
     };
   }
@@ -335,7 +336,7 @@ async function start(hotData = {}) {
   function placeItem(it) {
     if (it.obj) it.obj.removeFromParent();
     const look = itemLook(it);
-    let obj = look.kind === 'bowl' ? bowlModel(look.bits, look.batter) : dessertModel(it.d, look);
+    let obj = look.kind === 'bowl' ? bowlModel(look.bits, look.batter, it.d) : dessertModel(it.d, look);
     it.look = look;
     it.live = look.kind === 'model' && look.live ? liveFeature(obj) : null;
     if (it.where === 'hands') {
@@ -2054,7 +2055,7 @@ async function start(hotData = {}) {
   /** What the station should do with this item right now. */
   function focusTask(st, it) {
     const step = curStep(it);
-    if (st.type === 'decor') return { key: `${it.step}:decor`, mode: 'decor', step, title: `Decorate the ${it.d.name}` };
+    if (st.type === 'decor') return { key: `${it.step}:decor`, mode: 'decor', step, title: `${IS_RESTAURANT ? 'Plate' : 'Decorate'} the ${it.d.name}` };
     if (step.t === 'gather') {
       const ing = [...it.raw][0];
       const pd = ING_PREP[ing];
@@ -2207,7 +2208,7 @@ async function start(hotData = {}) {
     ui.showGame({
       station: `${st.name} · ${it.d.name}`,
       title: task.title,
-      hint: task.ing ? `${ING_BY_ID[task.ing].name} for the ${it.d.name}. ${MODE_HINT[task.mode]}` : MODE_HINT[task.mode],
+      hint: task.ing ? `${ING_BY_ID[task.ing].name} for the ${it.d.name}. ${MODE_HINT[task.mode]}` : task.mode === 'decor' && IS_RESTAURANT ? 'Add the garnishes in ticket order. Keys 1–9, 0, - and = work too.' : MODE_HINT[task.mode],
       mode: task.mode,
       tapLabel: task.step.tapLabel || TAP_LABEL[task.mode] || 'Tap!',
       decor: task.mode === 'decor' ? { tops: curStep(it).tops, idx: F.idx } : null,
@@ -2386,7 +2387,9 @@ async function start(hotData = {}) {
   }
 
   // which decorating tool lays down each topping
-  const TOP_TOOL = { whipped: 'bag', frosting: 'bag', glaze: 'bag', pink: 'pink', sprinkles: 'shaker', powdered: 'sugar', fudge: 'fudge', caramel: 'caramel', cherry: 'cherries', strawberry: 'cherries', nuts: 'nuts', shavings: 'spatula' };
+  const TOP_TOOL = IS_RESTAURANT
+    ? { herbs: 'tweezers', basil: 'tweezers', flowers: 'tweezers', parmesan: 'grater', pepper: 'mill', sugar: 'sifter', oil: 'oil', balsamic: 'balsamic', sauce: 'sauce', cream: 'cream', lemon: 'lemons', raspberries: 'berries' }
+    : { whipped: 'bag', frosting: 'bag', glaze: 'bag', pink: 'pink', sprinkles: 'shaker', powdered: 'sugar', fudge: 'fudge', caramel: 'caramel', cherry: 'cherries', strawberry: 'cherries', nuts: 'nuts', shavings: 'spatula' };
 
   function selectTopping(id) {
     const F = S.focus;
@@ -2630,7 +2633,10 @@ async function start(hotData = {}) {
 
   // decorating tools hop over the treat, shake/pipe/drizzle, and hop back
   const SPRINKLE_COLS = ['#EE93A6', '#86BADB', '#FFE08A', '#AFCB9C', '#F4A646'];
-  const POUR_COL = { fudge: '#5A3422', caramel: '#D9822F', pink: '#F7B9C4', bag: '#FFF3DC' };
+  const POUR_COL = { fudge: '#5A3422', caramel: '#D9822F', pink: '#F7B9C4', bag: '#FFF3DC', oil: '#C9C04A', balsamic: '#4E2A2A', sauce: '#6E2A22', cream: '#FFF6E4' };
+  // what falls from the shaking and placing tools, and where it comes out of them
+  const CRUMB_COL = { sugar: '#FFFFFF', nuts: '#B87A45', cherries: '#E4605E', mill: '#2E1E14', grater: '#FBE8B0', sifter: '#FFFFFF', tweezers: '#6E9F4E', lemons: '#FFE066', berries: '#D8406A' };
+  const CRUMB_FROM = { shaker: V3(0, 0.16, 0), sugar: V3(0, 0.16, 0), mill: V3(0, 0.002, 0), grater: V3(0, 0.18, 0.01), sifter: V3(0, 0.0, 0), tweezers: V3(0, 0.0, 0) };
   const qRot = new THREE.Quaternion();
   function animateDecorTools(F, dt) {
     const st = F.st;
@@ -2644,15 +2650,19 @@ async function start(hotData = {}) {
     const topY = F.it.obj ? F.it.obj.userData.top : st.slot.y + 0.12;
     const over = st.group.worldToLocal(st.slot.clone().setY(topY + 0.1));
     const key = A.key;
-    const pours = key === 'fudge' || key === 'caramel' || key === 'pink' || key === 'bag';
-    const shakes = key === 'shaker' || key === 'sugar';
+    const pours = !!POUR_COL[key];
+    const shakes = key === 'shaker' || key === 'sugar' || key === 'grater' || key === 'sifter' || key === 'mill';
     let p, r = rest.r.clone(), w = 0;
     if (A.t < 0.3) p = rest.p.clone().lerp(over, ease(A.t / 0.3));
     else if (A.t < 0.75) {
       p = over.clone();
       w = (A.t - 0.3) / 0.45;
-      if (shakes) { r.set(Math.PI * 0.85, 0, Math.sin(w * 30) * 0.25); p.y += 0.06; }
-      else if (key === 'cherries' || key === 'nuts') { r.set(0, 0, 0.9 * Math.sin(w * Math.PI)); p.y -= 0.02; }
+      if (key === 'mill') { r.set(0, w * 16, 0); p.y += 0.08; }
+      else if (key === 'grater') { r.set(-0.5, 0, 0); p.y += 0.02; p.x += Math.sin(w * 40) * 0.012; }
+      else if (key === 'sifter') { r.set(0, 0, Math.sin(w * 30) * 0.18); p.y += 0.09; }
+      else if (key === 'tweezers') { r.set(0, 0, 0); p.y += 0.02 - Math.sin(w * Math.PI) * 0.05; }
+      else if (shakes) { r.set(Math.PI * 0.85, 0, Math.sin(w * 30) * 0.25); p.y += 0.06; }
+      else if (key === 'cherries' || key === 'nuts' || key === 'lemons' || key === 'berries') { r.set(0, 0, 0.9 * Math.sin(w * Math.PI)); p.y -= 0.02; }
       else if (key === 'spatula') { r.set(0, w * 6, 0); p.y -= 0.07; }
       else if (key === 'bag') { r.set(0.25, 0, 0); p.y -= 0.045; }
       else { r.set(Math.PI * 0.92, 0, Math.sin(w * Math.PI * 4) * 0.15); p.y += 0.14; }
@@ -2680,9 +2690,10 @@ async function start(hotData = {}) {
         sm.position.set(nozzle.x, nozzle.y - drop / 2, nozzle.z);
         sm.scale.set(1, drop, 1);
       } else if (Math.random() < dt * (shakes ? 40 : 7)) {
-        const from = t.localToWorld(shakes ? V3(0, 0.16, 0) : V3(0, 0.04, 0));
-        const col = key === 'sugar' ? '#FFFFFF' : key === 'shaker' ? pick(SPRINKLE_COLS) : key === 'nuts' ? '#B87A45' : key === 'cherries' ? '#E4605E' : '#5A3422';
-        spawnCrumbs(from, col, shakes ? 2 : 1, { spread: 0.12, up: -0.1, floor: topY - 0.01, size: key === 'cherries' ? 2.2 : key === 'nuts' ? 1.5 : 0.7, life: 0.7 });
+        const from = t.localToWorld((CRUMB_FROM[key] || V3(0, 0.04, 0)).clone());
+        const col = key === 'shaker' ? pick(SPRINKLE_COLS) : CRUMB_COL[key] || '#5A3422';
+        const big = { cherries: 2.2, nuts: 1.5, lemons: 1.8, berries: 1.8, tweezers: 1.4 }[key] || 0.7;
+        spawnCrumbs(from, col, shakes ? 2 : 1, { spread: 0.12, up: -0.1, floor: topY - 0.01, size: big, life: 0.7 });
       }
     }
     if (A.t >= 1) st.toolAnim = null;
@@ -3172,6 +3183,7 @@ async function start(hotData = {}) {
     ui.tick(dt);
 
     // ambience
+    if (W.update) W.update(dt, S.time);
     W.glows.forEach((g, i) => { g.material.opacity = g.userData.baseOpacity * (0.82 + 0.18 * Math.sin(S.time * 1.7 + i * 1.3)); });
     W.clockHands[0].rotation.z = -(((S.clock / 60) % 12) / 12) * Math.PI * 2;
     W.clockHands[1].rotation.z = -((S.clock % 60) / 60) * Math.PI * 2;
@@ -3196,6 +3208,9 @@ async function start(hotData = {}) {
       // on wide screens the title card sits on the left, so slide the diorama right
       const target = isoTarget.clone().addScaledVector(isoRight, aspect > 1.25 ? -4.2 : 0);
       if (aspect <= 1.25) target.addScaledVector(isoUp, -2.2);
+      // a tall diorama (the cliff) frames a little lower
+      const TT = W.title || { zoom: 1, drop: 0, dropTall: 3.6 };
+      target.addScaledVector(isoUp, -(aspect > 1.25 ? TT.drop : TT.dropTall));
       const pos = target.clone().addScaledVector(isoDir, TITLE_DIST).addScaledVector(isoUp, Math.sin(S.time * 0.4) * 0.15);
       cam.position.copy(pos);
       cam.fov = titleFov();

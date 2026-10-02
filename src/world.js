@@ -343,6 +343,111 @@ function buildDecor() {
   return { group: g, hero: turn, face: null, turntable: turn, tools, slotLocal: V3(0, H + 0.212, 0.08) };
 }
 
+const STEEL = '#C9D4D9', STEEL_LIGHT = '#E1E8EB', STEEL_DARK = '#8FA0A8';
+const TAU = Math.PI * 2;
+
+/**
+ * The restaurant's plating station: a stainless pass under two heat lamps, a
+ * slate plating wheel, warm plates stacked ready, a ticket rail, and the
+ * garnishing tools (tweezers, pepper mill, microplane, sifter, sauce bottles).
+ */
+function buildPlatingPass() {
+  const g = counter(1.6, 0.9, 0.91, STEEL, STEEL_LIGHT);
+  const H = 0.91;
+  // the heat-lamp gantry over the back of the counter
+  for (const sx of [-1, 1]) put(g, mk(G.cyl(0.025, 0.025, 0.9, 0.01, 12), STEEL_DARK, { outline: 'thin' }), sx * 0.74, H + 0.45, -0.36);
+  put(g, mk(G.box(1.56, 0.06, 0.12, 0.025), STEEL), 0, H + 0.92, -0.36);
+  put(g, mk(G.box(1.5, 0.05, 0.05, 0.02), STEEL_DARK, { outline: 'thin' }), 0, H + 0.86, -0.3);
+  for (const x of [-0.34, 0.34]) {
+    put(g, mk(G.cyl(0.008, 0.008, 0.16, 0.004, 8), STEEL_DARK, { outline: false }), x, H + 0.83, -0.2).rotation.x = 0.9;
+    const shade = put(g, mk(G.lathe(v2([[0.03, 0], [0.12, -0.1], [0.125, -0.11], [0.0005, -0.11], [0.0005, 0.02], [0.03, 0.02]]), 28), '#B9284A', { outline: 'mid' }), x, H + 0.8, -0.06);
+    shade.rotation.x = 0.15;
+    const bulb = put(g, mk(G.circle(0.1, 24), toon('#FFB25A', { emissive: '#FF9A3A', emissiveIntensity: 0.9 }), { outline: false, cast: false }), x, H + 0.689, -0.044);
+    bulb.rotation.x = -Math.PI / 2 + 0.15;
+    const gl = glow('#FFB060', 0.9, 0.5);
+    put(g, gl, x, H + 0.55, -0.02);
+  }
+  // order tickets clipped to the rail
+  for (let i = 0; i < 4; i++) {
+    const t = put(g, mk(G.box(0.09, 0.13, 0.004, 0.002), '#FFFBF0', { outline: 'thin', cast: false }), -0.45 + i * 0.3, H + 0.79, -0.27);
+    t.rotation.z = (i % 2 ? 1 : -1) * 0.04;
+    for (let k = 0; k < 3; k++) put(t, mk(G.box(0.06, 0.006, 0.001, 0.001), '#8A7A6A', { outline: false, cast: false }), 0, 0.03 - k * 0.022, 0.0025);
+  }
+  // the plating wheel: a slate disc that turns while you plate
+  const turn = dyn(put(g, new THREE.Group(), 0, H, 0.08));
+  put(turn, mk(G.cyl(0.07, 0.08, 0.03, 0.01), STEEL_DARK, { outline: 'thin' }), 0, 0.015, 0);
+  put(turn, mk(G.cyl(0.3, 0.3, 0.025, 0.01, 36), '#3A3E46', { outline: 'mid' }), 0, 0.04, 0);
+  put(turn, mk(G.torus(0.3, 0.006, TAU, 48), STEEL, { outline: false }), 0, 0.053, 0).rotation.x = Math.PI / 2;
+  // a stack of warm plates and a folded side towel
+  for (let i = 0; i < 6; i++) put(g, mk(G.cyl(0.13, 0.11, 0.014, 0.006, 28), '#FFFFFF', { outline: 'thin' }), -0.6, H + 0.007 + i * 0.016, 0.22);
+  const band = put(g, mk(G.torus(0.118, 0.003, TAU, 32), '#3E5C76', { outline: false }), -0.6, H + 0.099, 0.22);
+  band.rotation.x = Math.PI / 2;
+  put(g, mk(G.box(0.22, 0.03, 0.14, 0.012), '#FFFBF0', { outline: 'thin' }), 0.6, H + 0.015, 0.25).rotation.y = 0.2;
+  put(g, mk(G.box(0.224, 0.006, 0.02, 0.003), '#3E5C76', { outline: false }), 0.6, H + 0.031, 0.25).rotation.y = 0.2;
+
+  const tools = {};
+  // squeeze bottles: oil, balsamic, sauce and cream
+  const bottle = (col, cap) => {
+    const b = new THREE.Group();
+    put(b, mk(G.cyl(0.036, 0.038, 0.16, 0.02), col, { outline: 'mid' }), 0, 0.08, 0);
+    put(b, mk(G.cyl(0.022, 0.033, 0.04, 0.01), cap, { outline: 'thin' }), 0, 0.18, 0);
+    put(b, mk(G.cyl(0.004, 0.012, 0.05, 0.003), cap, { outline: 'thin' }), 0, 0.22, 0);
+    put(b, mk(G.box(0.05, 0.05, 0.002, 0.001), '#FFFBF0', { outline: false }), 0, 0.08, 0.037);
+    return b;
+  };
+  tools.oil = tool(g, bottle('#C9C04A', '#3A3A44'), 0.18, H, -0.3);
+  tools.balsamic = tool(g, bottle('#4E2A2A', '#3A3A44'), 0.28, H, -0.3);
+  tools.sauce = tool(g, bottle('#6E2A22', '#FFFBF0'), 0.38, H, -0.3);
+  tools.cream = tool(g, bottle('#FFF6E4', STEEL_DARK), 0.48, H, -0.3);
+  // a tall wooden pepper mill (it grinds from the bottom)
+  const mill = new THREE.Group();
+  put(mill, mk(G.cyl(0.026, 0.026, 0.012, 0.004, 16), STEEL, { outline: 'thin' }), 0, 0.006, 0);
+  put(mill, mk(G.lathe(v2([[0.0005, 0.012], [0.03, 0.012], [0.032, 0.05], [0.022, 0.11], [0.03, 0.15], [0.026, 0.18], [0.0005, 0.18]]), 24), '#5A3422', { outline: 'mid' }));
+  put(mill, mk(G.sphere(0.014, 12, 8), STEEL, { outline: 'thin' }), 0, 0.19, 0);
+  tools.mill = tool(g, mill, -0.18, H, -0.32);
+  // a microplane for the parmesan, lying on the counter
+  const grater = new THREE.Group();
+  put(grater, mk(G.box(0.03, 0.1, 0.018, 0.008), '#3A3A44', { outline: 'thin' }), 0, 0.05, 0);
+  put(grater, mk(G.box(0.034, 0.17, 0.004, 0.002), STEEL_LIGHT, { outline: 'thin' }), 0, 0.185, 0);
+  for (let i = 0; i < 6; i++) put(grater, mk(G.box(0.026, 0.003, 0.003, 0.001), STEEL_DARK, { outline: false }), 0, 0.12 + i * 0.024, 0.002);
+  tools.grater = tool(g, grater, -0.4, H + 0.012, -0.2, -Math.PI / 2, 0.3, 0);
+  // a little sieve for icing sugar
+  const sifter = new THREE.Group();
+  const rim = put(sifter, mk(G.torus(0.045, 0.006, TAU, 24), STEEL, { outline: 'thin' }), 0, 0.02, 0);
+  rim.rotation.x = Math.PI / 2;
+  put(sifter, mk(G.sphere(0.044, 16, 8, ), '#DCE6EA', { outline: 'thin' }), 0, 0.02, 0).scale.set(1, 0.4, 1);
+  put(sifter, mk(G.box(0.12, 0.008, 0.014, 0.004), STEEL_DARK, { outline: 'thin' }), 0.1, 0.02, 0);
+  tools.sifter = tool(g, sifter, -0.55, H, -0.12, 0, 0.6, 0);
+  // plating tweezers, lying on a folded cloth
+  const tw = new THREE.Group();
+  for (const s of [-1, 1]) {
+    const arm = put(tw, mk(G.box(0.006, 0.19, 0.004, 0.002), STEEL_LIGHT, { outline: 'thin' }), s * 0.006, 0.095, 0);
+    arm.rotation.z = s * 0.03;
+  }
+  put(tw, mk(G.box(0.02, 0.012, 0.006, 0.003), STEEL_DARK, { outline: 'thin' }), 0, 0.188, 0);
+  tools.tweezers = tool(g, tw, 0.05, H + 0.008, 0.32, -Math.PI / 2, 1.2, 0);
+  // little steel ramekins of lemon wedges and raspberries
+  const ram = (fill) => {
+    const d = new THREE.Group();
+    put(d, mk(G.lathe(v2([[0.0005, 0], [0.04, 0], [0.05, 0.04], [0.054, 0.045], [0.048, 0.045], [0.04, 0.008], [0.0005, 0.008]]), 28), STEEL, { outline: 'thin' }));
+    fill(d);
+    return d;
+  };
+  tools.lemons = tool(g, ram((d) => {
+    for (let i = 0; i < 3; i++) {
+      const w = put(d, mk(G.sphere(0.02, 12, 8, ), '#FFE066', { outline: 'thin' }), Math.cos(i * 2.1) * 0.016, 0.03, Math.sin(i * 2.1) * 0.016);
+      w.scale.set(1.3, 0.6, 0.6);
+      w.rotation.y = i * 2.1;
+    }
+  }), 0.66, H, 0.02);
+  tools.berries = tool(g, ram((d) => {
+    for (let i = 0; i < 6; i++) put(d, mk(G.sphere(0.012, 10, 8), '#D8406A', { outline: 'thin' }), Math.cos(i * 2.4) * 0.022 * Math.sqrt(i / 6 + 0.2), 0.03 + (i % 2) * 0.008, Math.sin(i * 2.4) * 0.022 * Math.sqrt(i / 6 + 0.2));
+  }), 0.66, H, -0.16);
+  mergeStatic(turn);
+  for (const t of Object.values(tools)) mergeStatic(t);
+  return { group: g, hero: turn, face: null, turntable: turn, tools, slotLocal: V3(0, H + 0.053, 0.08) };
+}
+
 function buildScrap() {
   const g = new THREE.Group();
   const basketG = dyn(put(g, new THREE.Group()));
@@ -355,23 +460,40 @@ function buildScrap() {
 }
 
 /** The center island: a butcher-block top, a cutting board with tools, two set-down spots. */
-function buildIsland() {
+function buildIsland(o = {}) {
   const g = new THREE.Group();
   const H = 0.92;
-  put(g, mk(G.box(0.9, 0.8, 2.1, 0.1), K.islandBody), 0, 0.42, 0);
-  put(g, mk(G.box(0.86, 0.08, 2.06, 0.03), K.islandDeep, { outline: false }), 0, 0.04, 0);
-  for (const sx of [-1, 1]) {
-    for (const z of [-0.62, 0, 0.62]) {
-      put(g, mk(G.box(0.04, 0.56, 0.52, 0.03), K.islandBody, { outline: 'thin', cast: false }), sx * 0.46, 0.44, z);
-      put(g, mk(G.sphere(0.035, 10, 8), C.butter, { outline: 'thin' }), sx * 0.49, 0.56, z + 0.16);
+  let topMesh;
+  if (o.pro) {
+    // a stainless prep table on legs, with a shelf of pots, pans and towels underneath
+    for (const sx of [-1, 1]) for (const sz of [-1, 1]) put(g, mk(G.cyl(0.03, 0.03, H - 0.06, 0.01, 12), STEEL, { outline: 'thin' }), sx * 0.48, (H - 0.06) / 2, sz * 1.06);
+    for (const sx of [-1, 1]) put(g, mk(G.box(0.05, 0.05, 2.12, 0.02), STEEL_DARK, { outline: 'thin' }), sx * 0.48, 0.2, 0);
+    put(g, mk(G.box(1.0, 0.03, 2.16, 0.012), STEEL), 0, 0.22, 0);
+    const pot = put(g, mk(G.cyl(0.2, 0.19, 0.34, 0.03, 24), STEEL_LIGHT, { outline: 'mid' }), 0.18, 0.405, -0.6);
+    put(pot, mk(G.torus(0.2, 0.012, TAU, 24), STEEL_DARK, { outline: false }), 0, 0.17, 0).rotation.x = Math.PI / 2;
+    for (const sx of [-1, 1]) put(pot, mk(G.torus(0.035, 0.009, Math.PI, 10), STEEL_DARK, { outline: 'thin' }), sx * 0.21, 0.1, 0).rotation.set(0, Math.PI / 2, -sx * Math.PI / 2);
+    for (let i = 0; i < 5; i++) put(g, mk(G.box(0.44, 0.02, 0.32, 0.01), i % 2 ? STEEL : STEEL_DARK, { outline: 'thin' }), -0.2, 0.245 + i * 0.022, 0.1);
+    for (let i = 0; i < 3; i++) put(g, mk(G.box(0.3, 0.04, 0.22, 0.015), i % 2 ? '#FFFBF0' : '#3E5C76', { outline: 'thin' }), 0.2, 0.255 + i * 0.042, 0.7);
+    topMesh = put(g, mk(G.box(1.1, 0.06, 2.32, 0.02), STEEL_LIGHT), 0, H - 0.03, 0);
+    // a marine edge all round the top
+    for (const sx of [-1, 1]) put(g, mk(G.box(0.02, 0.025, 2.32, 0.008), STEEL, { outline: false }), sx * 0.55, H + 0.008, 0);
+  } else {
+    put(g, mk(G.box(0.9, 0.8, 2.1, 0.1), K.islandBody), 0, 0.42, 0);
+    put(g, mk(G.box(0.86, 0.08, 2.06, 0.03), K.islandDeep, { outline: false }), 0, 0.04, 0);
+    for (const sx of [-1, 1]) {
+      for (const z of [-0.62, 0, 0.62]) {
+        put(g, mk(G.box(0.04, 0.56, 0.52, 0.03), K.islandBody, { outline: 'thin', cast: false }), sx * 0.46, 0.44, z);
+        put(g, mk(G.sphere(0.035, 10, 8), C.butter, { outline: 'thin' }), sx * 0.49, 0.56, z + 0.16);
+      }
     }
+    topMesh = put(g, mk(G.box(1.1, 0.1, 2.32, 0.04), K.islandTop()), 0, H - 0.05, 0);
   }
-  const topMesh = put(g, mk(G.box(1.1, 0.1, 2.32, 0.04), K.islandTop()), 0, H - 0.05, 0);
-  // the cutting board (the prep station) and its tools
+  // the cutting board (the prep station) and its tools: wood at the bakery, a white poly board in the restaurant
   const board = put(g, new THREE.Group(), 0, H, 0.5);
-  put(board, mk(G.box(0.7, 0.035, 0.48, 0.016), K.board, { outline: 'mid' }), 0, 0.0175, 0);
-  put(board, mk(G.box(0.62, 0.003, 0.4, 0.002), '#EDC992', { outline: false }), 0, 0.036, 0);
-  const hole = put(board, mk(G.cyl(0.025, 0.025, 0.037, 0.008), '#C9965A', { outline: false }), -0.3, 0.0175, 0.0);
+  put(board, mk(G.box(0.7, 0.035, 0.48, 0.016), o.pro ? '#F2F5EE' : K.board, { outline: 'mid' }), 0, 0.0175, 0);
+  put(board, mk(G.box(0.62, 0.003, 0.4, 0.002), o.pro ? '#E8EEE4' : '#EDC992', { outline: false }), 0, 0.036, 0);
+  if (o.pro) for (const sz of [-1, 1]) put(board, mk(G.box(0.7, 0.036, 0.02, 0.006), '#6EAF6E', { outline: false }), 0, 0.0175, sz * 0.23);
+  const hole = put(board, mk(G.cyl(0.025, 0.025, 0.037, 0.008), o.pro ? '#D9E2DC' : '#C9965A', { outline: false }), -0.3, 0.0175, 0.0);
   hole.scale.set(1.6, 1, 1);
   const props = dyn(put(board, new THREE.Group()));
   const tools = {};
@@ -412,31 +534,64 @@ function buildIsland() {
   put(paw, mk(G.sphere(0.034, 14, 10), '#FFF3DC', { outline: 'thin' }), 0, 0.012, -0.042).scale.set(1.25, 0.8, 0.7);
   tools.paw = tool(props, paw, 0, 0.3, 0);
   for (const k of ['bag', 'spatula', 'scoop', 'pitcher', 'fork', 'tamper', 'spoon', 'paw']) tools[k].visible = false;
-  // two set-down spots
+  // two set-down spots: doilies at the bakery, steel sheet trays in the restaurant
   const spots = [];
   for (const z of [-0.3, -0.82]) {
     const spot = put(g, new THREE.Group(), 0, H, z);
+    if (o.pro) {
+      put(spot, mk(G.box(0.42, 0.012, 0.36, 0.005), STEEL, { outline: 'mid' }), 0, 0.006, 0);
+      for (const sx of [-1, 1]) put(spot, mk(G.box(0.012, 0.02, 0.36, 0.004), STEEL_DARK, { outline: false }), sx * 0.205, 0.012, 0);
+      for (const sz of [-1, 1]) put(spot, mk(G.box(0.42, 0.02, 0.012, 0.004), STEEL_DARK, { outline: false }), 0, 0.012, sz * 0.175);
+      spots.push({ group: spot, slotLocal: V3(0, 0.013, 0) });
+      continue;
+    }
     put(spot, mk(G.cyl(0.21, 0.19, 0.02, 0.008, 28), C.cream2, { outline: 'mid' }), 0, 0.01, 0);
     const doily = new THREE.Mesh(G.circle(0.17), toon('#fff', { map: ginghamTex(C.pinkDeep, 3) }));
     doily.rotation.x = -Math.PI / 2;
     put(spot, doily, 0, 0.021, 0);
     spots.push({ group: spot, slotLocal: V3(0, 0.025, 0) });
   }
-  // utensil crock and a dusting of flour, clear of the board's tools
-  const crock = put(g, new THREE.Group(), 0.36, H, -0.02);
-  put(crock, mk(G.cyl(0.08, 0.07, 0.18, 0.02, 16), C.pumpkin, { outline: 'thin' }), 0, 0.09, 0);
-  for (const [a, col] of [[0.3, C.honey], [-0.25, C.pinkDeep], [0.05, C.honeyDark]]) {
-    const u = put(crock, mk(G.capsule(0.015, 0.26), col, { outline: 'thin' }), Math.sin(a) * 0.03, 0.26, Math.cos(a) * 0.02);
-    u.rotation.z = a;
-  }
-  for (let i = 0; i < 14; i++) {
-    const d = put(g, mk(G.sphere(0.012, 6, 4), '#FFFBF0', { outline: false, cast: false }), -0.25 + Math.sin(i * 7.1) * 0.12, H + 0.003, 0.1 + Math.cos(i * 3.3) * 0.06);
-    d.scale.y = 0.25;
+  if (o.pro) {
+    // a steel utensil holder (ladle, whisk, tongs) and a row of mise en place in hotel pans
+    const crock = put(g, new THREE.Group(), 0.38, H, -0.02);
+    put(crock, mk(G.cyl(0.07, 0.07, 0.17, 0.01, 18), STEEL, { outline: 'thin' }), 0, 0.085, 0);
+    const ladle = put(crock, mk(G.cyl(0.006, 0.006, 0.3, 0.003, 8), STEEL_DARK, { outline: 'thin' }), -0.02, 0.27, 0);
+    ladle.rotation.z = 0.2;
+    put(crock, mk(G.sphere(0.035, 14, 8), STEEL_LIGHT, { outline: 'thin' }), -0.05, 0.42, 0).scale.y = 0.6;
+    const whisk = put(crock, new THREE.Group(), 0.025, 0.2, 0.015);
+    whisk.rotation.z = -0.25;
+    put(whisk, mk(G.cyl(0.008, 0.008, 0.1, 0.004, 8), '#3A3A44', { outline: 'thin' }), 0, 0.05, 0);
+    for (let i = 0; i < 4; i++) {
+      const loop = put(whisk, mk(G.torus(0.025, 0.0018, TAU, 16), STEEL_LIGHT, { outline: false }), 0, 0.15, 0);
+      loop.scale.y = 2;
+      loop.rotation.y = (i / 4) * Math.PI;
+    }
+    const tongs = put(crock, mk(G.box(0.02, 0.28, 0.01, 0.004), STEEL_LIGHT, { outline: 'thin' }), 0.005, 0.26, -0.03);
+    tongs.rotation.x = 0.15;
+    const mise = [['#5E9F4E', '#7EBF6A'], ['#E4483E', '#F07A5A'], ['#F6E6C8', '#E9D2A8'], ['#F4D58A', '#FFE08A']];
+    mise.forEach(([a, b], i) => {
+      const pan = put(g, new THREE.Group(), -0.4, H, -1.0 + i * 0.17);
+      put(pan, mk(G.box(0.16, 0.05, 0.15, 0.01), STEEL, { outline: 'thin' }), 0, 0.025, 0);
+      put(pan, mk(G.box(0.14, 0.01, 0.13, 0.004), STEEL_DARK, { outline: false }), 0, 0.046, 0);
+      for (let k = 0; k < 12; k++) put(pan, mk(G.box(0.014, 0.01, 0.014, 0.003), k % 2 ? a : b, { outline: false, cast: false }), ((k * 37) % 9 - 4) * 0.013, 0.054, ((k * 53) % 9 - 4) * 0.012).rotation.y = k;
+    });
+  } else {
+    // utensil crock and a dusting of flour, clear of the board's tools
+    const crock = put(g, new THREE.Group(), 0.36, H, -0.02);
+    put(crock, mk(G.cyl(0.08, 0.07, 0.18, 0.02, 16), C.pumpkin, { outline: 'thin' }), 0, 0.09, 0);
+    for (const [a, col] of [[0.3, C.honey], [-0.25, C.pinkDeep], [0.05, C.honeyDark]]) {
+      const u = put(crock, mk(G.capsule(0.015, 0.26), col, { outline: 'thin' }), Math.sin(a) * 0.03, 0.26, Math.cos(a) * 0.02);
+      u.rotation.z = a;
+    }
+    for (let i = 0; i < 14; i++) {
+      const d = put(g, mk(G.sphere(0.012, 6, 4), '#FFFBF0', { outline: false, cast: false }), -0.25 + Math.sin(i * 7.1) * 0.12, H + 0.003, 0.1 + Math.cos(i * 3.3) * 0.06);
+      d.scale.y = 0.25;
+    }
   }
   for (const sz of [-1, 1]) {
     const sign = label('sign-island', 0.62);
     sign.rotation.y = sz > 0 ? 0 : Math.PI;
-    put(g, sign, 0, 0.6, sz * 1.056);
+    put(g, sign, 0, o.pro ? H - 0.12 : 0.6, sz * (o.pro ? 1.165 : 1.056));
   }
   for (const t of Object.values(tools)) mergeStatic(t);
   g.add(blob(1.5, 2.7));
@@ -565,7 +720,7 @@ function buildColdStorage(items, rows = COLD_ROWS) {
 
 // ------------------------------------------------------------------ walls
 
-export { buildMixer, buildStove, buildOven, buildFreezer, buildDecor, buildScrap, buildIsland, buildDryShelf, buildColdStorage, put, dyn, setLayer, V3 };
+export { buildMixer, buildStove, buildOven, buildFreezer, buildDecor, buildPlatingPass, buildScrap, buildIsland, buildDryShelf, buildColdStorage, put, dyn, setLayer, V3 };
 
 export function wallPiece(w, h, t, x, y, z, mat, plane, tile) {
   const m = mk(G.box(w, h, t, 0.06), mat, { cast: false });

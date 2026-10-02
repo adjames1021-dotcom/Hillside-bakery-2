@@ -635,12 +635,12 @@ export const R_STEP_FX = {
   'fish-chips': { 'Cut thick chips': 'chips' },
   'steak-frites': { 'Cut the fries': 'fries', 'Slice against the grain': 'slice' },
   'roast-chicken': { 'Carve the chicken': 'carve' },
-  'filet': { 'Spoon over the sauce': 'sauce' },
-  'chicken-parm': { 'Bread the chicken': 'crumb', 'Melt the cheese': 'cheese' },
+  'filet': { 'Sear the filet': 'sear', 'Spoon over the sauce': 'sauce' },
+  'chicken-parm': { 'Bread the chicken': 'crumb', 'Fry until crisp': 'fried', 'Melt the cheese': 'cheese' },
   'lava-cake': { 'Fill the ramekins': 'fill' },
   'creme-brulee': { 'Pour into ramekins': 'fill', 'Torch the sugar': 'crust' },
   'panna-cotta': { 'Pour into molds': 'fill', 'Unmold onto the plate': 'flip' },
-  'wellington': { 'Wrap in pastry': 'pastry', 'Score the top': 'score', 'Slice it': 'slice' },
+  'wellington': { 'Sear the beef': 'beef', 'Wrap in pastry': 'pastry', 'Score the top': 'score', 'Slice it': 'slice' },
   'bouillabaisse': { 'Ladle into the bowl': 'soup', 'Add the seafood': 'seafood' },
 };
 

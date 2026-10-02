@@ -9,7 +9,7 @@ import { signTex, plant, counter, sconce, pendant, frame } from './props.js';
 import { label } from './ingredients.js';
 import { buildHighlight, mergeStatic } from './merge.js';
 import {
-  ROOM, FP_LAYER, stationStyle, buildMixer, buildStove, buildOven, buildFreezer, buildDecor, buildScrap, buildIsland,
+  ROOM, FP_LAYER, stationStyle, buildMixer, buildStove, buildOven, buildFreezer, buildPlatingPass, buildScrap, buildIsland,
   buildDryShelf, buildColdStorage, wallPiece, put, dyn, setLayer, V3,
 } from './world.js';
 
@@ -302,23 +302,40 @@ export function buildRestaurant(scene) {
 
   // --- the cliff the restaurant sits on, and a ring of sea around it (the title diorama)
   put(world, mk(G.box(12.7, 0.55, 10.7, 0.22), '#E9D3B0'), 0, -0.36, 0);
+  // a tall sea cliff: bands of sandstone stepping down to the water, with
+  // ledges, boulders and tufts of grass on the way down
+  const SEA_Y = -6.6;
   const cliffCols = ['#D9A47A', '#C98A62', '#E2B086', '#B97A56'];
-  put(world, mk(G.box(12.9, 1.3, 10.9, 0.3), cliffCols[0], { cast: false }), 0, -1.25, 0);
-  put(world, mk(G.box(12.4, 1.4, 10.4, 0.3), cliffCols[1], { cast: false }), 0.1, -2.5, -0.05);
-  // rocky ledges and boulders along the cliff face
-  for (let i = 0; i < 34; i++) {
-    const a = (i / 34) * Math.PI * 2;
+  const strata = [[-1.25, 1.3, 12.9, 10.9, 0, 0], [-2.55, 1.35, 12.6, 10.6, 0.1, -0.05], [-3.85, 1.3, 12.75, 10.75, -0.08, 0.06], [-5.15, 1.35, 12.45, 10.45, 0.12, 0.02], [-6.35, 1.2, 12.85, 10.85, -0.05, -0.04]];
+  strata.forEach(([y, h, w, d, ox, oz], i) => put(world, mk(G.box(w, h, d, 0.3), cliffCols[i % 4], { cast: false }), ox, y, oz));
+  const cliffK = (rx, rz, pad = 0) => 1 / Math.max(Math.abs(rx) / (6.35 + pad), Math.abs(rz) / (5.35 + pad));
+  for (let i = 0; i < 64; i++) {
+    const a = (i / 64) * Math.PI * 2 + (i % 2) * 0.05;
     const rx = Math.cos(a), rz = Math.sin(a);
-    const k = 1 / Math.max(Math.abs(rx) / 6.35, Math.abs(rz) / 5.35);
-    const rock = put(world, mk(lumpyRock(0.45 + (i % 3) * 0.16, i), cliffCols[i % 4], { outline: 'mid', cast: false }), rx * k, -1.0 - (i % 3) * 0.75, rz * k);
-    rock.scale.set(1.5, 0.7 + (i % 4) * 0.12, 1.2);
+    const k = cliffK(rx, rz);
+    const y = -1.0 - ((i * 7) % 9) * 0.62;
+    const rock = put(world, mk(lumpyRock(0.42 + (i % 3) * 0.17, i), cliffCols[(i * 3) % 4], { outline: 'mid', cast: false }), rx * k, y, rz * k);
+    rock.scale.set(1.5, 0.7 + (i % 4) * 0.14, 1.2);
     rock.rotation.y = -a;
   }
-  for (const y of [-1.85, -2.75]) {
-    const ledge = put(world, mk(G.box(13.0 - (y < -2 ? 0.3 : 0), 0.12, 11.0 - (y < -2 ? 0.3 : 0), 0.05), '#B97A56', { outline: 'thin', cast: false }), 0.05, y, 0);
+  for (const [y, inset] of [[-1.85, 0], [-3.2, 0.25], [-4.5, 0.1], [-5.8, 0.3]]) {
+    const ledge = put(world, mk(G.box(13.0 - inset, 0.12, 11.0 - inset, 0.05), '#B97A56', { outline: 'thin', cast: false }), 0.05, y, 0);
     ledge.userData.noHighlight = true;
   }
-  const SEA_Y = -3.2;
+  // grass tufts clinging to the ledges
+  for (let i = 0; i < 26; i++) {
+    const a = (i / 26) * Math.PI * 2 + 0.2;
+    const k = cliffK(Math.cos(a), Math.sin(a), 0.05);
+    const tuft = put(world, mk(G.sphere(0.22, 10, 6), i % 3 ? '#8AAF6A' : '#6E9A5A', { outline: 'thin', cast: false }), Math.cos(a) * k, [-1.78, -3.13, -4.43, -5.73][i % 4], Math.sin(a) * k);
+    tuft.scale.set(1.4, 0.5, 1);
+  }
+  // a little wooden jetty at the foot of the cliff, with a rowboat tied up
+  const jetty = put(world, new THREE.Group(), -3.5, SEA_Y + 0.28, 5.55);
+  put(jetty, mk(G.box(1.1, 0.1, 2.4, 0.04), '#9A6A42', { outline: 'mid', cast: false }), 0, 0, 1.1);
+  for (const [x, z] of [[-0.48, 0.3], [0.48, 0.3], [-0.48, 2.2], [0.48, 2.2]]) put(jetty, mk(G.cyl(0.07, 0.07, 0.9, 0.02, 8), '#6E4A2E', { outline: 'thin', cast: false }), x, -0.3, z);
+  const row = put(world, new THREE.Group(), -2.55, SEA_Y + 0.08, 7.0);
+  put(row, mk(G.lathe([new THREE.Vector2(0.0005, 0), new THREE.Vector2(0.3, 0.04), new THREE.Vector2(0.42, 0.26), new THREE.Vector2(0.44, 0.3), new THREE.Vector2(0.0005, 0.3)], 18), '#3E5C76', { outline: 'mid', cast: false })).scale.set(1, 1, 2.2);
+  put(row, mk(G.box(0.7, 0.04, 0.12, 0.02), '#D9A47A', { outline: 'thin', cast: false }), 0, 0.26, 0.1);
   const sea = new THREE.Mesh(new THREE.CircleGeometry(16, 64), toon('#5FB0D8', { unique: true }));
   sea.rotation.x = -Math.PI / 2;
   sea.receiveShadow = true;
@@ -331,9 +348,11 @@ export function buildRestaurant(scene) {
     foam.rotation.y = -a;
   }
   for (const [x, z, s] of [[-9.5, 7.5, 1.2], [9.8, -6.5, 0.9], [-10.5, -4, 0.8]]) put(world, mk(lumpyRock(s, x), '#B97A56', { outline: 'mid' }), x, SEA_Y + 0.2, z).scale.y = 0.7;
-  const boatD = put(world, sailboat(), -9.0, SEA_Y + 0.05, 9.5);
+  // boats that sail around the cliff (the diorama's one, and the far ones seen from inside)
+  const boats = [];
+  const boatD = dyn(put(world, sailboat(), -9.0, SEA_Y + 0.05, 9.5));
   boatD.scale.setScalar(0.55);
-  boatD.rotation.y = 0.6;
+  boats.push({ obj: boatD, cx: 0, cz: 0, rx: 13.6, rz: 12.6, speed: 0.04, phase: 2.2, y: SEA_Y + 0.05 });
 
   // --- floors: checkered tiles in the kitchen, walnut planks in the dining room
   const kFloor = put(world, mk(G.box(6.0, 0.14, 10, 0.05), toon('#fff', { map: checkerTex() }), { outline: 'mid', cast: false }), -3.0, -0.07, 0);
@@ -420,10 +439,10 @@ export function buildRestaurant(scene) {
   const lh = lighthouse();
   put(fp, lh.group, 24, SEA_Y, 30);
   glows.push(lh.glow);
-  for (const [x, z, ry, s] of [[16, 22, 0.4, 0.8], [34, 8, -0.8, 1], [12, 40, 1.2, 0.7]]) {
-    const b = put(fp, sailboat(s > 0.9 ? '#FFFBF0' : '#FFE9A8'), x, SEA_Y + 0.05, z);
-    b.rotation.y = ry;
+  for (const [r, speed, phase, s] of [[27, 0.022, 0.7, 0.8], [36, -0.016, 0.2, 1], [44, 0.012, 1.3, 0.7], [31, -0.02, 3.6, 0.85]]) {
+    const b = dyn(put(fp, sailboat(s > 0.9 ? '#FFFBF0' : '#FFE9A8'), 0, SEA_Y + 0.05, 0));
     b.scale.setScalar(s);
+    boats.push({ obj: b, cx: 0, cz: 0, rx: r, rz: r * 0.9, speed, phase, y: SEA_Y + 0.05 });
   }
   // lanterns on posts along the cliff edge outside the glass
   for (const [x, z] of [[7.0, -3.5], [7.0, 0], [7.0, 3.5], [3.0, 6.0], [0.4, 6.0]]) {
@@ -453,7 +472,7 @@ export function buildRestaurant(scene) {
   const stove = buildStove();
   onBack(stove.group, -2.9);
   regStation('cook', 'cook', 'Range', stove);
-  const decor = buildDecor();
+  const decor = buildPlatingPass();
   onBack(decor.group, -1.1);
   regStation('decor', 'decor', 'Plating Station', decor);
   const mixer = buildMixer();
@@ -467,7 +486,7 @@ export function buildRestaurant(scene) {
   world.add(scrap.group);
   regStation('scrap', 'scrap', 'Scrap Bin', scrap);
 
-  const island = buildIsland();
+  const island = buildIsland({ pro: true });
   island.group.position.set(-2.75, 0, 0.75);
   world.add(island.group);
   worldUV(island.top, 'xz', 1.2);
@@ -726,6 +745,19 @@ export function buildRestaurant(scene) {
     nav: { aisleX: AISLE_X, laneX: LANE_X, crossZ: CROSS_Z },
     signPos: V3(DOOR_X, 1.3, -4.82),
     bg: '#F3CDBE',
+    title: { zoom: 1.28, drop: 2.6, dropTall: 5.5 },
+    // sail the boats around the cliff and let them bob on the swell
+    update(dt, time) {
+      for (const b of boats) {
+        const a = b.phase + time * b.speed;
+        const x = b.cx + Math.cos(a) * b.rx, z = b.cz + Math.sin(a) * b.rz;
+        const dir = Math.sign(b.speed);
+        const dx = -Math.sin(a) * b.rx * dir, dz = Math.cos(a) * b.rz * dir;
+        b.obj.position.set(x, b.y + Math.sin(time * 1.3 + b.phase * 3) * 0.06, z);
+        // the bow (the jib end, local -x) points along the course, with a gentle roll
+        b.obj.rotation.set(Math.sin(time * 1.1 + b.phase) * 0.05, Math.atan2(dz, -dx), Math.sin(time * 0.9 + b.phase * 2) * 0.04);
+      }
+    },
     lighting: { hemi: ['#FFE9D8', '#C9A0A8', 1.3], sun: { color: '#FFC08A', intensity: 1.55, pos: [12, 8, 9] } },
   };
 }

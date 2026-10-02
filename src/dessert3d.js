@@ -1596,7 +1596,10 @@ function genericToppings(g, list, c) {
 // The restaurant registers its dish templates, garnishes and bowl bits here.
 
 const GARNISH = {};
-export function registerDishes({ templates = {}, spec = {}, bits = {}, garnish = {} }) {
+// a kitchen can bring its own mixing bowl, and its own look for what's mixed in it
+const BOWL = { body: null, band: null, fills: {} };
+export function registerDishes({ templates = {}, spec = {}, bits = {}, garnish = {}, bowl = null }) {
+  if (bowl) Object.assign(BOWL, bowl, { fills: { ...BOWL.fills, ...(bowl.fills || {}) } });
   Object.assign(T, templates);
   Object.assign(SPEC, spec);
   Object.assign(BIT, bits);
@@ -1843,17 +1846,22 @@ export function bitColor(id) {
 }
 
 /** The mixing bowl you carry while gathering: each ingredient in its own little pile, or batter once mixed. */
-export function bowlModel(ids = [], batter = null) {
+export function bowlModel(ids = [], batter = null, d = null) {
   const g = new THREE.Group();
   const pts = [V(0.0005, 0), V(0.085, 0), V(0.125, 0.03), V(0.152, 0.08), V(0.158, 0.1), V(0.148, 0.102), V(0.14, 0.082), V(0.115, 0.036), V(0.078, 0.013), V(0.0005, 0.013)];
-  add(g, part(G.lathe(pts, 28), C.cream2, 'mid'));
-  const band = add(g, part(G.torus(0.152, 0.008, TAU, 28), C.pinkDeep, false), 0, 0.09, 0);
+  add(g, part(G.lathe(pts, 28), BOWL.body || C.cream2, 'mid'));
+  const band = add(g, part(G.torus(0.152, 0.008, TAU, 28), BOWL.band || C.pinkDeep, false), 0, 0.09, 0);
   band.rotation.x = Math.PI / 2;
   const rand = rng(ids.length * 13 + 5);
   const liquids = ids.filter((id) => BIT[id] && BIT[id][0] === 'liquid');
   const solids = ids.filter((id) => !liquids.includes(id));
   let floor = 0.014;
-  if (batter) {
+  const fill = batter && d && BOWL.fills[d.id];
+  if (fill) {
+    // something that isn't a batter: noodles, a ball of dough, a pan of rice
+    fill(g, rand);
+    floor = 0.07;
+  } else if (batter) {
     add(g, part(G.cyl(0.128, 0.128, 0.02, 0.006, 28), batter, false), 0, 0.058, 0);
     const sw = add(g, part(G.torus(0.05, 0.008, TAU * 0.8, 20), mixHex(batter, '#FFFBF0', 0.3), false), 0, 0.07, 0);
     sw.rotation.x = Math.PI / 2;
