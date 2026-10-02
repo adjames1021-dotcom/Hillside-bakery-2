@@ -328,66 +328,162 @@ export function buildRestaurant(scene) {
   };
 
   // --- the cliff the restaurant sits on, and a ring of sea around it (the title diorama)
-  put(world, mk(G.box(12.7, 0.55, 10.7, 0.22), '#E9D3B0'), 0, -0.36, 0);
-  // a tall sea cliff: bands of sandstone stepping down to the water, with
-  // ledges, boulders and tufts of grass on the way down
+  put(world, mk(G.box(12.7, 0.3, 10.7, 0.12), '#E9D3B0'), 0, -0.235, 0);
+  // A headland: the restaurant sits on the seaward corner of a rocky promontory.
+  // Sheer, jagged sandstone falls from the glass walls to the sea; behind the
+  // kitchen the grassy clifftop runs on, with trees and a path from the door.
   const SEA_Y = -10;
-  const cliffCols = ['#D9A47A', '#C98A62', '#E2B086', '#B97A56'];
-  // sandstone bands from just under the floor down to the water, each a little in or out
-  const strata = [];
-  for (let y = -0.6, i = 0; y > SEA_Y - 0.4; i++) {
-    const h = 1.25 + (i % 3) * 0.1;
-    const inset = [0, 0.3, 0.15, 0.4, 0.05, 0.25][i % 6];
-    strata.push([y - h / 2, h, 12.9 - inset, 10.9 - inset, ((i * 37) % 5 - 2) * 0.05, ((i * 53) % 5 - 2) * 0.04]);
-    y -= h;
+  const cliffCols = ['#D9A47A', '#C98A62', '#E2B086', '#B97A56', '#CF956C'];
+  // the coastline at the top, going round the headland (x, z)
+  const COAST = [
+    [7.25, -5.6], [7.45, -2.5], [7.35, 0.6], [7.2, 3.6], [6.6, 5.8], [5.0, 6.35], [2.0, 6.35], [-1.2, 6.5], [-4.2, 6.8],
+    [-6.8, 6.9], [-8.8, 5.6], [-10.0, 2.8], [-10.4, -0.6], [-10.1, -4.0], [-9.0, -7.0], [-6.8, -8.9], [-3.6, -9.4],
+    [-0.4, -9.0], [2.8, -8.4], [5.4, -7.6], [6.7, -6.9],
+  ];
+  // densify it so every band can have its own jagged edge
+  const coast = [];
+  for (let i = 0; i < COAST.length; i++) {
+    const [x0, z0] = COAST[i], [x1, z1] = COAST[(i + 1) % COAST.length];
+    const n = Math.max(1, Math.round(Math.hypot(x1 - x0, z1 - z0) / 0.55));
+    for (let k = 0; k < n; k++) coast.push([x0 + ((x1 - x0) * k) / n, z0 + ((z1 - z0) * k) / n]);
   }
-  strata.forEach(([y, h, w, d, ox, oz], i) => put(world, mk(G.box(w, h, d, 0.3), cliffCols[i % 4], { cast: false }), ox, y, oz));
-  const cliffK = (rx, rz, pad = 0) => 1 / Math.max(Math.abs(rx) / (6.35 + pad), Math.abs(rz) / (5.35 + pad));
-  for (let i = 0; i < 96; i++) {
-    const a = (i / 96) * Math.PI * 2 + (i % 2) * 0.05;
-    const rx = Math.cos(a), rz = Math.sin(a);
-    const k = cliffK(rx, rz);
-    const y = -1.0 - ((i * 7) % 13) * ((-SEA_Y - 1.6) / 12);
-    const rock = put(world, mk(lumpyRock(0.42 + (i % 3) * 0.17, i), cliffCols[(i * 3) % 4], { outline: 'mid', cast: false }), rx * k, y, rz * k);
-    rock.scale.set(1.5, 0.7 + (i % 4) * 0.14, 1.2);
-    rock.rotation.y = -a;
+  const hash = (i, j) => { const v = Math.sin(i * 12.9898 + j * 78.233) * 43758.5453; return v - Math.floor(v); };
+  // outward normals of the coastline (it runs counter-clockwise seen from above)
+  const normals = coast.map((p, i) => {
+    const a = coast[(i - 1 + coast.length) % coast.length], b = coast[(i + 1) % coast.length];
+    const tx = b[0] - a[0], tz = b[1] - a[1], l = Math.hypot(tx, tz) || 1;
+    return [tz / l, -tx / l];
+  });
+  // how far each stretch of coast is from the seaward faces: 0 = sheer cliff
+  // under the glass walls, 1 = the land side, which steps down to the water
+  // (distance from the L of sheer cliff under the glass walls: the right side and the front as far as the kitchen)
+  const segDist = (px, pz, ax, az, bx, bz) => {
+    const vx = bx - ax, vz = bz - az;
+    const t = Math.max(0, Math.min(1, ((px - ax) * vx + (pz - az) * vz) / (vx * vx + vz * vz)));
+    return Math.hypot(px - ax - vx * t, pz - az - vz * t);
+  };
+  const landward = coast.map(([x, z]) => {
+    const d = Math.min(segDist(x, z, 7.3, -6.6, 7.3, 6.4), segDist(x, z, 7.3, 6.5, -5.0, 6.5));
+    const k = Math.max(0, Math.min(1, (d - 0.9) / 3.2));
+    return k * k * (3 - 2 * k);
+  });
+  const SLOPE = 0.8; // metres the hillside steps out per band of rock
+  const outline = (layer, expand, rough = 0.32, steps = 0) => coast.map(([x, z], i) => {
+    // on the cliff, buttresses and coves that run the whole height; on the land, terraces
+    const buttress = layer > 0 && layer < 90 ? (1 - landward[i]) * (0.42 * Math.sin(i * 0.33 + 1.3) + 0.2 * Math.sin(i * 0.9)) : 0;
+    const e = expand + buttress + landward[i] * steps * SLOPE + (hash(i, layer) - 0.5) * rough * 2 + Math.sin(i * 0.7 + layer * 1.9) * rough * 0.4;
+    return [x + normals[i][0] * e, z + normals[i][1] * e];
+  });
+  /** One band of rock: the outline extruded down from `top` by `h`. */
+  const band = (pts, top, h, col, outlineW = 'mid') => {
+    const sh = new THREE.Shape();
+    pts.forEach(([x, z], i) => (i ? sh.lineTo(x, -z) : sh.moveTo(x, -z)));
+    sh.closePath();
+    const geo = new THREE.ExtrudeGeometry(sh, { depth: h, bevelEnabled: true, bevelThickness: 0.12, bevelSize: 0.12, bevelSegments: 2, curveSegments: 1 });
+    geo.rotateX(-Math.PI / 2);
+    // the bevel rounds the edges outward, so sink it to keep the top where asked
+    return put(world, mk(geo, col, { outline: outlineW, cast: false }), 0, top - h - 0.12, 0);
+  };
+  // bands from the clifftop down to the water: in, out, overhanging a little, then a scree slope at the foot
+  const FLARE = [0, 0.1, 0.06, 0.16, 0.1, 0.3, 0.7, 1.5];
+  const bandTops = [];
+  {
+    let y = -0.2;
+    FLARE.forEach((e, i) => {
+      const h = i === FLARE.length - 1 ? y - SEA_Y + 0.4 : (-SEA_Y - 0.6) / FLARE.length;
+      const pts = outline(i, e, i === 0 ? 0.18 : 0.22, i);
+      band(pts, y, h, cliffCols[i % cliffCols.length]);
+      // grass on the land side's terraces (tucked out of sight under the cliff face)
+      if (i > 0) {
+        const g = outline(i, e - 0.08, 0.22, i).map(([x, z], k) => [x - normals[k][0] * (1 - landward[k]) * 0.7, z - normals[k][1] * (1 - landward[k]) * 0.7]);
+        band(g, y + 0.05, 0.08, i % 2 ? '#8AAF6A' : '#9DBF72', 'thin');
+      }
+      bandTops.push({ y, pts, e });
+      y -= h;
+    });
   }
-  const LEDGES = [-1.85, -3.2, -4.5, -5.8, -7.1, -8.4, -9.4];
-  for (const [y, inset] of LEDGES.map((y, i) => [y, [0, 0.25, 0.1, 0.3, 0.05, 0.2, 0.35][i]])) {
-    const ledge = put(world, mk(G.box(13.0 - inset, 0.12, 11.0 - inset, 0.05), '#B97A56', { outline: 'thin', cast: false }), 0.05, y, 0);
-    ledge.userData.noHighlight = true;
+  // the grassy clifftop, just under the restaurant's floor
+  band(outline(99, -0.12, 0.1), -0.09, 0.12, '#9DBF72', 'thin');
+  // tall columns of rock standing proud of the sheer faces, so it reads as cliff, not layers
+  coast.forEach(([x, z], i) => {
+    if (landward[i] > 0.3 || hash(i, 77) > 0.42) return;
+    const li = 1 + Math.floor(hash(i, 78) * 5);
+    const b = bandTops[li];
+    const [px, pz] = b.pts[i];
+    const tall = 1.6 + hash(i, 79) * 2.6;
+    const col = put(world, mk(lumpyRock(0.42 + hash(i, 80) * 0.3, i + 500), cliffCols[(i + 2) % cliffCols.length], { outline: 'mid', cast: false }), px - normals[i][0] * 0.12, b.y - tall * 0.5, pz - normals[i][1] * 0.12);
+    col.scale.set(1.1, tall / 0.9, 0.8);
+    col.rotation.y = Math.atan2(normals[i][0], normals[i][1]);
+  });
+  // boulders stuck to the faces, grass on the land-side lips, scree and foam at the foot
+  bandTops.forEach(({ y, pts }, li) => {
+    if (li === 0) return;
+    pts.forEach(([x, z], i) => {
+      const r = hash(i, li + 40);
+      if (r < 0.16) {
+        const rock = put(world, mk(lumpyRock(0.35 + r * 2.2, i + li * 50), cliffCols[(i + li) % cliffCols.length], { outline: 'mid', cast: false }), x, y - 0.5 - r * 2, z);
+        rock.scale.set(1.3, 0.8, 1.1);
+        rock.rotation.y = i;
+      } else if (r > 0.86 && landward[i] > 0.5) {
+        const tuft = put(world, mk(G.sphere(0.2, 10, 6), r > 0.93 ? '#6E9A5A' : '#8AAF6A', { outline: 'thin', cast: false }), x, y + 0.04, z);
+        tuft.scale.set(1.5, 0.45, 1.1);
+      }
+    });
+  });
+  const foot = outline(7, 1.9, 0.5, FLARE.length);
+  foot.forEach(([x, z], i) => {
+    if (i % 3 === 0) put(world, mk(lumpyRock(0.5 + hash(i, 7) * 0.6, i + 900), cliffCols[3], { outline: 'mid', cast: false }), x, SEA_Y + 0.15, z).scale.y = 0.6;
+    if (i % 4 === 1) {
+      const foam = put(world, mk(G.sphere(0.5, 12, 8), '#FFFBF0', { outline: 'thin', cast: false }), x, SEA_Y + 0.02, z);
+      foam.scale.set(1.7, 0.16, 1);
+      foam.rotation.y = i;
+    }
+  });
+  // up top behind the kitchen: trees, bushes and a stepping-stone path from the door
+  const tree = (x, z, s, y = -0.09) => {
+    const t = put(world, new THREE.Group(), x, y, z);
+    put(t, mk(G.cyl(0.12 * s, 0.16 * s, 1.1 * s, 0.04, 10), '#7A5236', { outline: 'thin', cast: false }), 0, 0.55 * s, 0);
+    for (const [dx, dy, dz, r] of [[0, 1.35, 0, 0.7], [0.35, 1.1, 0.2, 0.5], [-0.3, 1.15, -0.2, 0.55], [0.05, 1.75, 0.05, 0.45]]) {
+      put(t, mk(G.sphere(r * s, 14, 10), dy > 1.5 ? '#86B464' : '#6E9A5A', { outline: 'mid', cast: false }), dx * s, dy * s, dz * s);
+    }
+  };
+  for (const [x, z, s] of [[-8.0, -5.6, 1.2], [-8.8, -1.0, 1], [-8.4, 3.4, 1.1], [-6.8, -7.6, 0.9], [-3.4, -8.1, 1.05], [0.8, -7.8, 0.85], [4.9, -6.6, 0.75]]) tree(x, z, s);
+  // and a few more on the terraces going down the slope, each on its own band's top
+  [[2, 30, 0.8], [3, 52, 0.75], [4, 44, 0.85], [5, 60, 0.7]].forEach(([li, i, sc]) => {
+    const b = bandTops[li];
+    const k = i % b.pts.length;
+    if (landward[k] < 0.8) return;
+    // a little in from that band's edge, toward the middle of the headland
+    const [x, z] = b.pts[k];
+    tree(x - normals[k][0] * 0.5, z - normals[k][1] * 0.5, sc, b.y + 0.04);
+  });
+  for (const [x, z, s] of [[-7.4, 1.0, 0.5], [-8.0, 5.0, 0.45], [-1.6, -7.2, 0.45], [-9.0, -3.8, 0.55], [2.6, -7.4, 0.4]]) {
+    const bush = put(world, mk(G.sphere(s, 14, 10), '#7EA85E', { outline: 'mid', cast: false }), x, -0.1 + s * 0.4, z);
+    bush.scale.y = 0.7;
+    for (let k = 0; k < 3; k++) put(world, mk(G.sphere(0.05, 8, 6), ['#F7B9C4', '#FFE08A', '#FFFBF0'][k], { outline: false, cast: false }), x + Math.cos(k * 2.1) * s * 0.7, -0.1 + s * 0.75, z + Math.sin(k * 2.1) * s * 0.7);
   }
-  // grass tufts clinging to the ledges
-  for (let i = 0; i < 40; i++) {
-    const a = (i / 40) * Math.PI * 2 + 0.2;
-    const k = cliffK(Math.cos(a), Math.sin(a), 0.05);
-    const tuft = put(world, mk(G.sphere(0.22, 10, 6), i % 3 ? '#8AAF6A' : '#6E9A5A', { outline: 'thin', cast: false }), Math.cos(a) * k, LEDGES[i % LEDGES.length] + 0.07, Math.sin(a) * k);
-    tuft.scale.set(1.4, 0.5, 1);
+  for (let i = 0; i < 7; i++) {
+    const stone = put(world, mk(G.cyl(0.28, 0.3, 0.06, 0.03, 12), '#E9D3B0', { outline: 'thin', cast: false }), 3.3 - i * 0.22 + Math.sin(i) * 0.15, -0.07, -5.9 - i * 0.62);
+    stone.scale.set(1, 1, 0.8);
   }
   // a little wooden jetty at the foot of the cliff, with a rowboat tied up
-  const jetty = put(world, new THREE.Group(), -3.5, SEA_Y + 0.28, 5.55);
+  const jetty = put(world, new THREE.Group(), -3.5, SEA_Y + 0.28, 8.4);
   put(jetty, mk(G.box(1.1, 0.1, 2.4, 0.04), '#9A6A42', { outline: 'mid', cast: false }), 0, 0, 1.1);
   for (const [x, z] of [[-0.48, 0.3], [0.48, 0.3], [-0.48, 2.2], [0.48, 2.2]]) put(jetty, mk(G.cyl(0.07, 0.07, 0.9, 0.02, 8), '#6E4A2E', { outline: 'thin', cast: false }), x, -0.3, z);
-  const row = put(world, new THREE.Group(), -2.55, SEA_Y + 0.08, 7.0);
+  const row = put(world, new THREE.Group(), -2.55, SEA_Y + 0.08, 9.9);
   put(row, mk(G.lathe([new THREE.Vector2(0.0005, 0), new THREE.Vector2(0.3, 0.04), new THREE.Vector2(0.42, 0.26), new THREE.Vector2(0.44, 0.3), new THREE.Vector2(0.0005, 0.3)], 18), '#3E5C76', { outline: 'mid', cast: false })).scale.set(1, 1, 2.2);
   put(row, mk(G.box(0.7, 0.04, 0.12, 0.02), '#D9A47A', { outline: 'thin', cast: false }), 0, 0.26, 0.1);
-  const sea = new THREE.Mesh(new THREE.CircleGeometry(16, 64), toon('#5FB0D8', { unique: true }));
+  const sea = new THREE.Mesh(new THREE.CircleGeometry(21, 72), toon('#5FB0D8', { unique: true }));
   sea.rotation.x = -Math.PI / 2;
   sea.receiveShadow = true;
   put(world, sea, 0, SEA_Y, 0);
-  for (let i = 0; i < 14; i++) {
-    const a = (i / 14) * Math.PI * 2;
-    const k = 1 / Math.max(Math.abs(Math.cos(a)) / 7.2, Math.abs(Math.sin(a)) / 6.2);
-    const foam = put(world, mk(G.sphere(0.55, 12, 8), '#FFFBF0', { outline: 'thin', cast: false }), Math.cos(a) * k, SEA_Y + 0.02, Math.sin(a) * k);
-    foam.scale.set(1.6, 0.18, 1);
-    foam.rotation.y = -a;
-  }
-  for (const [x, z, s] of [[-9.5, 7.5, 1.2], [9.8, -6.5, 0.9], [-10.5, -4, 0.8]]) put(world, mk(lumpyRock(s, x), '#B97A56', { outline: 'mid' }), x, SEA_Y + 0.2, z).scale.y = 0.7;
+  for (const [x, z, s] of [[11.5, 8.5, 1.2], [12.4, -5.5, 0.9], [4.0, 13.2, 0.8]]) put(world, mk(lumpyRock(s, x), '#B97A56', { outline: 'mid' }), x, SEA_Y + 0.2, z).scale.y = 0.7;
   // boats that sail around the cliff (the diorama's one, and the far ones seen from inside)
   const boats = [];
   const boatD = dyn(put(world, sailboat(), -9.0, SEA_Y + 0.05, 9.5));
   boatD.scale.setScalar(0.55);
-  boats.push({ obj: boatD, cx: 0, cz: 0, rx: 13.6, rz: 12.6, speed: 0.02, phase: 2.2, y: SEA_Y + 0.05 });
+  // it tacks back and forth off the seaward side (the land is behind)
+  boats.push({ obj: boatD, cx: -0.5, cz: -0.5, rx: 14.2, rz: 13.6, speed: 0.022, phase: 2.2, y: SEA_Y + 0.05, arc: [-0.65, 1.75] });
 
   // --- floors: checkered tiles in the kitchen, walnut planks in the dining room
   const kFloor = put(world, mk(G.box(6.0, 0.14, 10, 0.05), toon('#fff', { map: checkerTex() }), { outline: 'mid', cast: false }), -3.0, -0.07, 0);
@@ -446,7 +542,7 @@ export function buildRestaurant(scene) {
   const sunU = (Math.atan2(sunDir.x, sunDir.z) / (Math.PI * 2) + 1) % 1;
   const sky = new THREE.Mesh(new THREE.CylinderGeometry(70, 70, 64, 48, 1, true), new THREE.MeshBasicMaterial({ map: sunsetTex(1 - sunU), side: THREE.BackSide, fog: false }));
   put(fp, sky, 0, SEA_Y + 31.9, 0);
-  const seaFar = new THREE.Mesh(new THREE.RingGeometry(16, 72, 64, 1), new THREE.MeshBasicMaterial({ map: seaTex() }));
+  const seaFar = new THREE.Mesh(new THREE.RingGeometry(21, 72, 72, 1), new THREE.MeshBasicMaterial({ map: seaTex() }));
   // map the ring's uvs across the whole disc so the gradient runs out to the horizon
   {
     const pos = seaFar.geometry.attributes.position, uv = seaFar.geometry.attributes.uv;
@@ -785,13 +881,26 @@ export function buildRestaurant(scene) {
     // sail the boats around the cliff and let them bob on the swell
     update(dt, time) {
       for (const b of boats) {
-        const a = b.phase + time * b.speed;
+        let a, dir;
+        if (b.arc) {
+          // back and forth along an arc, turning round at each end
+          const mid = (b.arc[0] + b.arc[1]) / 2, half = (b.arc[1] - b.arc[0]) / 2;
+          a = mid + half * Math.sin(time * b.speed + b.phase);
+          dir = Math.cos(time * b.speed + b.phase) >= 0 ? 1 : -1;
+        } else {
+          a = b.phase + time * b.speed;
+          dir = Math.sign(b.speed);
+        }
         const x = b.cx + Math.cos(a) * b.rx, z = b.cz + Math.sin(a) * b.rz;
-        const dir = Math.sign(b.speed);
         const dx = -Math.sin(a) * b.rx * dir, dz = Math.cos(a) * b.rz * dir;
         b.obj.position.set(x, b.y + Math.sin(time * 1.3 + b.phase * 3) * 0.06, z);
-        // the bow (the jib end, local -x) points along the course, with a gentle roll
-        b.obj.rotation.set(Math.sin(time * 1.1 + b.phase) * 0.05, Math.atan2(dz, -dx), Math.sin(time * 0.9 + b.phase * 2) * 0.04);
+        // the bow (the jib end, local -x) swings round to the course, with a gentle roll
+        const want = Math.atan2(dz, -dx);
+        let turn = want - b.obj.rotation.y;
+        turn = Math.atan2(Math.sin(turn), Math.cos(turn));
+        const yaw = b.headed ? b.obj.rotation.y + turn * Math.min(1, dt * 0.8) : want;
+        b.headed = true;
+        b.obj.rotation.set(Math.sin(time * 1.1 + b.phase) * 0.05, yaw, Math.sin(time * 0.9 + b.phase * 2) * 0.04);
       }
     },
     lighting: { hemi: ['#FFE9D8', '#C9A0A8', 1.3], sun: { color: '#FFC08A', intensity: 1.55, pos: [12, 8, 9] } },
