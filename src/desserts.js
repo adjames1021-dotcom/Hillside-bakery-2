@@ -5,9 +5,11 @@ import {
   INK, TAU, LW, mixHex, dk, lt, rng, E, Ci, R, P, ts, cloud, tube, line, dots, inEll, sprinkles,
   plate, steam, cherry, strawberry, pecanHalf, bananaSlice, cylinder, prism, glassBowl, scoop, drawSticker,
 } from './sticker.js';
+import { IS_RESTAURANT } from './venue.js';
+import * as RD from './rest_data.js';
 
 // Where each kind of recipe step happens.
-export const STATIONS = {
+export const STATIONS = IS_RESTAURANT ? RD.R_STATIONS : {
   storage: { name: 'Storage', short: 'Gather' },
   mix: { name: 'Mixing Bowl', short: 'Mix' },
   prep: { name: 'Island', short: 'Prep' },
@@ -18,7 +20,7 @@ export const STATIONS = {
 };
 export const STEP_STATION = { gather: 'storage', mix: 'mix', prep: 'prep', bake: 'bake', cook: 'cook', chill: 'chill', decor: 'decor' };
 
-export const CATEGORIES = [
+export const CATEGORIES = IS_RESTAURANT ? RD.R_CATEGORIES : [
   { id: 'pies', name: 'Pies & Cobblers', color: '#F4A646', day: 1 },
   { id: 'cookies', name: 'Cookies & Bars', color: '#E8BC7A', day: 1 },
   { id: 'pastries', name: 'Pastries & Fried Treats', color: '#F7B9C4', day: 2 },
@@ -863,7 +865,7 @@ const TOPPING_ART = {
   },
 };
 
-export const TOPPINGS = [
+const B_TOPPINGS = [
   ['whipped', 'Whipped Cream', '1', '#FFFBF0'],
   ['frosting', 'Frosting', '2', '#FFF3DC'],
   ['fudge', 'Hot Fudge', '3', '#5A3422'],
@@ -876,7 +878,8 @@ export const TOPPINGS = [
   ['powdered', 'Powdered Sugar', '0', '#FFFBF0'],
   ['caramel', 'Caramel', '-', '#D9822F'],
   ['shavings', 'Chocolate Curls', '=', '#6A4029'],
-].map(([id, name, key, color], i) => ({ id, name, key, color, draw: TOPPING_ART[id], n: 90 + i }));
+];
+export const TOPPINGS = (IS_RESTAURANT ? RD.R_TOPPING_DEF : B_TOPPINGS).map(([id, name, key, color], i) => ({ id, name, key, color, draw: (IS_RESTAURANT ? RD.R_TOPPING_ART : TOPPING_ART)[id], n: 90 + i }));
 export const TOPPING_BY_ID = Object.fromEntries(TOPPINGS.map((t) => [t.id, t]));
 
 const topUrl = new Map();
@@ -902,7 +905,7 @@ const decor = (...tops) => ({ t: 'decor', tops });
 // Staples (flour, sugar, butter, milk...) go straight in, so every recipe's
 // prep is shaped by the ingredients that make it special. A "!" after an
 // ingredient in a recipe means "use it whole" (e.g. a caramel apple).
-export const ING_PREP = {
+const B_ING_PREP = {
   eggs: { label: 'Crack the eggs', mode: 'hit', n: 2 },
   apples: { label: 'Peel the apples', mode: 'swirl', n: 2 },
   peaches: { label: 'Slice the peaches', mode: 'tap', n: 5 },
@@ -919,6 +922,14 @@ export const ING_PREP = {
   nuts: { label: 'Chop the pecans', mode: 'tap', n: 5 },
   bread: { label: 'Cube the bread', mode: 'tap', n: 5 },
 };
+export const ING_PREP = IS_RESTAURANT ? RD.R_ING_PREP : B_ING_PREP;
+
+// special requests: a topping the treat doesn't normally get
+const B_EXTRA = ['sprinkles', 'cherry', 'whipped', 'fudge', 'caramel', 'strawberry', 'powdered', 'pink', 'shavings'];
+export function extraTops(d) {
+  if (!IS_RESTAURANT) return B_EXTRA;
+  return d.cat === 'sweet' ? RD.R_EXTRA_SWEET : RD.R_EXTRA_SAVORY;
+}
 
 const RECIPES = {
   'apple-pie': [gather('flour', 'butter', 'apples', 'cinnamon'), mix('Knead the dough'), prep('Roll out the crust', 'roll'), prep('Weave the lattice', 'alternate', 8), bake()],
@@ -1051,12 +1062,15 @@ function mixMode(label) {
 function stepLabel(s) {
   if (s.label) return s.label;
   if (s.t === 'gather') return 'Gather ingredients';
-  if (s.t === 'decor') return 'Decorate';
+  if (s.t === 'decor') return STATIONS.decor.short;
   return STATIONS[STEP_STATION[s.t]].short;
 }
 
-export const DESSERTS = D.map(([id, name, cat, desc, draw], i) => {
-  const steps = RECIPES[id].map((raw) => {
+const MENU = IS_RESTAURANT
+  ? { list: RD.R_DISHES, recipes: RD.R_RECIPES, fx: RD.R_STEP_FX, batter: RD.R_BATTER, catBatter: {} }
+  : { list: D, recipes: RECIPES, fx: STEP_FX, batter: BATTER, catBatter: CAT_BATTER };
+export const DESSERTS = MENU.list.map(([id, name, cat, desc, draw], i) => {
+  const steps = MENU.recipes[id].map((raw) => {
     const s = { ...raw };
     if (s.t === 'gather') {
       // "apples!" = use whole; everything else follows ING_PREP
@@ -1066,13 +1080,13 @@ export const DESSERTS = D.map(([id, name, cat, desc, draw], i) => {
     }
     if (s.t === 'mix') Object.assign(s, mixMode(s.label || ''));
     s.label = stepLabel(s);
-    const fx = STEP_FX[id] && STEP_FX[id][s.label];
+    const fx = MENU.fx[id] && MENU.fx[id][s.label];
     if (fx) s.fx = fx;
     s.station = STEP_STATION[s.t];
     return s;
   });
   const ingredients = [...new Set(steps.filter((s) => s.t === 'gather').flatMap((s) => s.items))];
-  return { id, name, cat, desc, draw, n: i + 1, steps, ingredients, batter: BATTER[id] || CAT_BATTER[cat] };
+  return { id, name, cat, desc, draw, n: i + 1, steps, ingredients, batter: MENU.batter[id] || MENU.catBatter[cat] };
 });
 export const BY_ID = Object.fromEntries(DESSERTS.map((d) => [d.id, d]));
 

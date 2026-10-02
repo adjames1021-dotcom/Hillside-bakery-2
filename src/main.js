@@ -1,8 +1,11 @@
 import * as THREE from 'three';
 import { G, mk, toon, outlineUniforms, setOutlineScale, setMaxAnisotropy } from './toon.js';
 import { buildWorld, ROOM, FP_LAYER } from './world.js';
+import { buildRestaurant } from './restaurant.js';
+import { IS_RESTAURANT, WORDS, VENUE, switchVenue } from './venue.js';
+import './rest3d.js';
 import { makeAnimal, animateAnimal } from './characters.js';
-import { DESSERTS, BY_ID, CATEGORIES, STATIONS, TOPPINGS, TOPPING_BY_ID, ING_PREP, dessertURL } from './desserts.js';
+import { DESSERTS, BY_ID, CATEGORIES, STATIONS, TOPPINGS, TOPPING_BY_ID, ING_PREP, dessertURL, extraTops } from './desserts.js';
 import { ING_BY_ID, prepModel } from './ingredients.js';
 import { createGame, MODE_HINT, TAP_LABEL } from './minigames.js';
 import { Shop, UPGRADES, DECOR, freshStock } from './shop.js';
@@ -17,7 +20,7 @@ import { sfx, unlockAudio, isMuted, setMuted } from './audio.js';
 
 const $ = (s) => document.querySelector(s);
 const BG = '#F9E2C8';
-const SAVE_KEY = 'hillside-bakery-save';
+const SAVE_KEY = WORDS.saveKey;
 const REACH = 2.4;
 const EYE = 1.25;
 const NAMES = {
@@ -32,7 +35,9 @@ const BAKE_TOASTY = 7;
 // the shop day: 8 AM morning prep, open 9 to 5, last orders at 4:30
 const T_MORNING = 8 * 60, T_OPEN = 9 * 60, T_LAST = 16.5 * 60, T_CLOSE = 17 * 60;
 const MIN_PER_SEC = 480 / 390; // an open day lasts about six and a half minutes
-const EXTRA_TOPS = ['sprinkles', 'cherry', 'whipped', 'fudge', 'caramel', 'strawberry', 'powdered', 'pink', 'shavings'];
+// the restaurant's plates are pricier, and so are its tips
+const COIN_SCALE = IS_RESTAURANT ? 1.6 : 1;
+const TIP = IS_RESTAURANT ? 20 : 12;
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const an = (name, cap = false) => `${/^[aeiou]/i.test(name) ? (cap ? 'An' : 'an') : (cap ? 'A' : 'a')} ${name}`;
@@ -88,9 +93,15 @@ async function start(hotData = {}) {
 
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(BG);
-  scene.add(new THREE.HemisphereLight('#FFF4DE', '#E2BE98', 1.35));
-  const sun = new THREE.DirectionalLight('#FFE6C2', 1.5);
-  sun.position.set(4.5, 13, 10);
+  const W = IS_RESTAURANT ? buildRestaurant(scene) : buildWorld(scene);
+  const LIT = W.lighting || { hemi: ['#FFF4DE', '#E2BE98', 1.35], sun: { color: '#FFE6C2', intensity: 1.5, pos: [4.5, 13, 10] } };
+  if (W.bg) {
+    scene.background = new THREE.Color(W.bg);
+    renderer.setClearColor(W.bg);
+  }
+  scene.add(new THREE.HemisphereLight(...LIT.hemi));
+  const sun = new THREE.DirectionalLight(LIT.sun.color, LIT.sun.intensity);
+  sun.position.set(...LIT.sun.pos);
   sun.castShadow = true;
   sun.shadow.mapSize.set(2048, 2048);
   Object.assign(sun.shadow.camera, { left: -9, right: 9, top: 9, bottom: -9, near: 1, far: 40 });
@@ -98,7 +109,6 @@ async function start(hotData = {}) {
   sun.shadow.normalBias = 0.03;
   scene.add(sun);
 
-  const W = buildWorld(scene);
   renderer.shadowMap.needsUpdate = true;
   const fx = new FX(scene);
   const vm = new ViewModel();
@@ -108,7 +118,7 @@ async function start(hotData = {}) {
   const stationList = Object.values(stations);
   const decorPieces = buildDecorPieces(scene);
   const sign = buildOpenSign();
-  sign.group.position.set(4.3, 1.3, -4.82);
+  sign.group.position.copy(W.signPos || V3(4.3, 1.3, -4.82));
   scene.add(sign.group);
   {
     const box = new THREE.Box3().setFromObject(sign.group).expandByVector(V3(0.12, 0.12, 0.2));
@@ -202,11 +212,13 @@ async function start(hotData = {}) {
 
   // ---------------------------------------------------------------- items
 
-  const isFryStep = (s) => !!s && s.t === 'cook' && /fry|oil/i.test(s.label);
+  const isFryStep = (s) => !!s && s.t === 'cook' && /fry|oil|sear/i.test(s.label);
   const isToastStep = (s) => !!s && s.t === 'cook' && /toast/i.test(s.label);
   const COOK_COLORS = [
     [/cherr/i, '#C8384A'], [/peach/i, '#F6A55A'], [/custard|curd/i, '#FFE066'], [/hot fudge|fudge|cocoa|chocolate/i, '#5A3422'],
     [/marshmallow/i, '#FFF6F0'], [/caramel|brown sugar|praline/i, '#C9782F'], [/coconut/i, '#D9B27A'], [/sugar/i, '#FFF3DC'],
+    // the restaurant's pots
+    [/saffron/i, '#F2B640'], [/risotto/i, '#F3E3B8'], [/tomato/i, '#D8402E'], [/mushroom/i, '#C9A27A'], [/cream/i, '#FFF3DC'], [/spaghetti|boil/i, '#F4D58A'],
   ];
   function cookColor(step, it) {
     for (const [re, col] of COOK_COLORS) if (re.test(step.label)) return col;
@@ -226,6 +238,7 @@ async function start(hotData = {}) {
     for (let i = 0; i < k && i < steps.length; i++) {
       const s = steps[i];
       if (s.t === 'gather') { if (form !== 'model') bits.push(...s.items); }
+      else if (s.t === 'cook' && isFryStep(s)) form = 'model';
       else if (s.t === 'mix' || s.t === 'cook' || s.t === 'chill') {
         // whatever was in the bowl is mixed (or melted) into the batter now
         if (form === 'bowl') form = 'batter';
@@ -237,7 +250,8 @@ async function start(hotData = {}) {
     const F = S.focus && S.focus.it === it ? S.focus : null;
     const live = F && !F.task.ing && cur && cur.fx && cur.fx !== 'flip' ? cur.fx : null;
     // shaping at the island and baking in the oven turn the batter into the treat right there
-    if (form !== 'model' && cur && ((live && cur.t === 'prep') || (st && st.type === 'bake' && cur.t === 'bake'))) form = 'model';
+    // so does searing or frying in a pan
+    if (form !== 'model' && cur && ((live && cur.t === 'prep') || (st && st.type === 'bake' && cur.t === 'bake') || (st && st.type === 'cook' && isFryStep(cur)))) form = 'model';
     if (form !== 'model') {
       if (cur && cur.t === 'gather') bits.push(...it.got);
       const batter = form === 'batter' ? it.d.batter : null;
@@ -266,7 +280,7 @@ async function start(hotData = {}) {
 
   // the biggest footprint (radius) and height each spot holds, so treats sit in
   // pans, on trays and on the board without poking through anything
-  const FIT = { prep: [0.2, 0.34], spot: [0.18, 0.42], decor: [0.3, 0.6], bake: [0.3, 0.32], cook: [0.165, 0.16], chill: [0.3, 0.5], mix: [0.3, 1] };
+  const FIT = { pass: [0.22, 0.42], prep: [0.2, 0.34], spot: [0.18, 0.42], decor: [0.3, 0.6], bake: [0.3, 0.32], cook: [0.165, 0.16], chill: [0.3, 0.5], mix: [0.3, 1] };
 
   function placeItem(it) {
     if (it.obj) it.obj.removeFromParent();
@@ -329,15 +343,18 @@ async function start(hotData = {}) {
   }
 
   function nextStepText(it) {
-    if (isDone(it)) return it.ticket ? `ready to serve ${it.ticket.customer.name}` : 'ready to serve';
+    if (isDone(it)) {
+      if (IS_RESTAURANT) return 'ready! Put it on the pass';
+      return it.ticket ? `ready to serve ${it.ticket.customer.name}` : 'ready to serve';
+    }
     const s = curStep(it);
     if (s.t === 'gather') {
       const need = s.items.filter((id) => !it.got.has(id)).map((id) => ING_BY_ID[id].name);
       const raw = [...it.raw].map((id) => ING_PREP[id].label.toLowerCase());
-      if (!need.length && raw.length) return `${raw.join(', ')} at the Island`;
-      return `gather ${need.join(', ')} (${stepWhere(s)})${raw.length ? `, then ${raw.join(', ')} at the Island` : ''}`;
+      if (!need.length && raw.length) return `${raw.join(', ')} at the ${STATIONS.prep.name}`;
+      return `gather ${need.join(', ')} (${stepWhere(s)})${raw.length ? `, then ${raw.join(', ')} at the ${STATIONS.prep.name}` : ''}`;
     }
-    if (s.t === 'decor') return `decorate at the ${STATIONS.decor.name}`;
+    if (s.t === 'decor') return `${IS_RESTAURANT ? 'plate' : 'decorate'} at the ${STATIONS.decor.name}`;
     return `${s.label.toLowerCase()} at the ${stepWhere(s)}`;
   }
 
@@ -355,7 +372,7 @@ async function start(hotData = {}) {
     const decorIdx = steps.map((x) => x.t).lastIndexOf('decor');
     const allTops = steps.filter((x) => x.t === 'decor').flatMap((x) => x.tops);
     const opts = [];
-    const extra = EXTRA_TOPS.filter((t) => !allTops.includes(t));
+    const extra = extraTops(d).filter((t) => !allTops.includes(t));
     if (extra.length) opts.push('extra', 'extra');
     if (allTops.includes('nuts')) opts.push('nonuts', 'nonuts');
     if (steps.some((x) => x.t === 'bake')) opts.push('toasty');
@@ -364,7 +381,7 @@ async function start(hotData = {}) {
     if (kind === 'extra') {
       const top = pick(extra);
       if (decorIdx >= 0) steps[decorIdx].tops.push(top);
-      else steps.push({ t: 'decor', tops: [top], label: 'Decorate', station: 'decor' });
+      else steps.push({ t: 'decor', tops: [top], label: IS_RESTAURANT ? 'Plate' : 'Decorate', station: 'decor' });
       const name = TOPPING_BY_ID[top].name;
       return { steps, variant: { kind, top, label: top === 'pink' ? 'Make it pink!' : `+ ${name}`, line: top === 'pink' ? 'and make it pink' : `with extra ${name.toLowerCase()}` } };
     }
@@ -372,14 +389,17 @@ async function start(hotData = {}) {
       for (const x of steps) if (x.t === 'decor') x.tops = x.tops.filter((t) => t !== 'nuts');
       return { steps: steps.filter((x) => x.t !== 'decor' || x.tops.length), variant: { kind, label: 'No nuts', line: 'but no nuts, please' } };
     }
-    if (kind === 'toasty') return { steps, variant: { kind, label: 'Extra toasty', line: 'extra toasty, if you can' } };
+    if (kind === 'toasty') return { steps, variant: { kind, label: IS_RESTAURANT ? 'Well done' : 'Extra toasty', line: IS_RESTAURANT ? 'well done, please' : 'extra toasty, if you can' } };
     return { steps, variant: { kind, label: 'In a hurry', line: "and I'm in a bit of a hurry" } };
   }
 
-  function createTicket(c, d, combo = null) {
-    const used = new Set(S.tickets.map((t) => t.num));
-    let num = 1;
-    while (used.has(num)) num++;
+  function createTicket(c, d, combo = null, hold = false) {
+    let num = 0;
+    if (!hold) {
+      const used = new Set(S.tickets.map((t) => t.num));
+      num = 1;
+      while (used.has(num)) num++;
+    }
     const wantsVariant = (S.day >= 2 || S.report.served >= 2) && Math.random() < (S.day >= 3 ? 0.45 : 0.3);
     const { steps, variant } = wantsVariant ? makeVariant(d) : { steps: stepsFor(d), variant: null };
     const tk = { id: ticketSeq++, num, customer: c, d, steps, variant, combo, special: S.special === d, item: null };
@@ -391,6 +411,7 @@ async function start(hotData = {}) {
       orphan.decorIdx = 0;
       tk.item = orphan;
     }
+    if (hold) return tk;
     c.tickets.push(tk);
     S.tickets.push(tk);
     if (!activeTicket() || !activeTicket().item) S.activeId = tk.id;
@@ -489,7 +510,7 @@ async function start(hotData = {}) {
     scene.add(a.root);
     const c = {
       a, kind, name: pick(NAMES[kind]), seat, order, orders, state: 'enter', mood: 1,
-      path: [V3(door.x, 0, -0.45), seat.aisle.clone(), V3(seat.x, 0, seat.z)],
+      path: IS_RESTAURANT ? [seat.aisle.clone(), V3(seat.x, 0, seat.z)] : [V3(door.x, 0, -0.45), seat.aisle.clone(), V3(seat.x, 0, seat.z)],
       patience: 150, maxPatience: 150, t: 0, hop: 0, bites: 0, tickets: [], plates: [], coinBonus: 1,
       bub: ui.bubble('order', '<span class="bang">!</span><span class="imgs"></span><span class="bar"><i></i></span>'),
       say: ui.bubble('say', ''),
@@ -503,7 +524,9 @@ async function start(hotData = {}) {
     S.customers.push(c);
     fx.puff(door.clone().setY(0.2), 8, 0.55);
     sfx.bell();
-    tip('firstCustomer', 'A customer is here! Walk over, look at them and press E to take their order.');
+    tip('firstCustomer', IS_RESTAURANT
+      ? 'Guests are arriving! Your waiters take their orders and bring the tickets to the pass.'
+      : 'A customer is here! Walk over, look at them and press E to take their order.');
     return c;
   }
 
@@ -519,36 +542,64 @@ async function start(hotData = {}) {
   }
 
   function takeOrder(c) {
+    noteOrder(c);
+    postOrder(c);
+  }
+
+  /** The customer tells you (or the waiter) what they'd like. */
+  function noteOrder(c) {
     c.state = 'wait';
     const steps = c.orders.reduce((a, d) => a + d.steps.length, 0);
     c.patience = c.maxPatience = (200 + steps * (c.orders.length > 1 ? 38 : 45)) * patienceMul();
     c.bub.classList.add('taken');
-    const tks = c.orders.map((d, i) => createTicket(c, d, c.orders.length > 1 ? `${i + 1} of ${c.orders.length}` : null));
+    const tks = c.orders.map((d, i) => createTicket(c, d, c.orders.length > 1 ? `${i + 1} of ${c.orders.length}` : null, true));
+    c.pending = tks;
     const rush = tks.find((t) => t.variant && t.variant.kind === 'rush');
     if (rush) {
       c.patience = c.maxPatience = c.maxPatience * 0.6;
       c.coinBonus = 1.5;
     }
-    refreshBubble(c);
     const first = tks[0];
     let line = c.orders.length > 1
       ? `${an(c.orders[0].name, true)} and ${an(c.orders[1].name)}, please!`
-      : pick([`One ${first.d.name}, please!`, `Could I have the ${first.d.name}?`, `${first.d.name}, pretty please!`]);
+      : IS_RESTAURANT
+        ? pick([`I'll have the ${first.d.name}, please.`, `The ${first.d.name}, if you please!`, `One ${first.d.name}, thank you!`])
+        : pick([`One ${first.d.name}, please!`, `Could I have the ${first.d.name}?`, `${first.d.name}, pretty please!`]);
     const v = tks.find((t) => t.variant);
-    if (v) line = line.replace(/[!?]$/, '') + `, ${v.variant.line}!`;
+    if (v) line = line.replace(/[!?.]$/, '') + `, ${v.variant.line}!`;
     say(c, line, 3.2);
+    c.bubImgs.innerHTML = c.orders.map((d) => `<span class="bo"><img src="${dessertURL(d)}" alt=""></span>`).join('');
+  }
+
+  /** The order's tickets go up in the kitchen. */
+  function postOrder(c) {
+    const tks = c.pending || [];
+    c.pending = null;
+    for (const tk of tks) {
+      const used = new Set(S.tickets.map((t) => t.num));
+      let num = 1;
+      while (used.has(num)) num++;
+      tk.num = num;
+      c.tickets.push(tk);
+      S.tickets.push(tk);
+      if (!activeTicket() || !activeTicket().item) S.activeId = tk.id;
+    }
+    refreshBubble(c);
     sfx.place();
     ui.bump('#tickets');
-    tip('firstTicket', 'Your ticket shows the recipe. Start by gathering ingredients from Dry Storage (left wall) and Cold Storage (front).');
+    const v = tks.find((t) => t.variant);
+    tip('firstTicket', IS_RESTAURANT
+      ? 'Order in! The ticket shows the recipe. Gather from the Pantry (left wall) and the Cold Room (front), cook it, then put the plate on the pass.'
+      : 'Your ticket shows the recipe. Start by gathering ingredients from Dry Storage (left wall) and Cold Storage (front).');
     if (v) tip('variant', `Special request! The ticket shows "${v.variant.label}". Follow the ticket, not the recipe book.`);
-    if (c.orders.length > 1) tip('combo', `${c.name} ordered two treats. They wait for both before eating.`);
+    if (c.orders.length > 1) tip('combo', `${c.name} ordered two ${IS_RESTAURANT ? 'dishes' : 'treats'}. They wait for both before eating.`);
   }
 
   function leave(c, happy) {
     c.state = 'leave';
     c.mood = happy ? 1 : -1;
     const door = W.door.clone();
-    c.path = [c.seat.aisle.clone(), V3(door.x, 0, -0.45), door];
+    c.path = IS_RESTAURANT ? [c.seat.aisle.clone(), door] : [c.seat.aisle.clone(), V3(door.x, 0, -0.45), door];
     c.bub.hidden = true;
     c.a.root.position.y = 0;
     c.hl.set(false);
@@ -576,14 +627,18 @@ async function start(hotData = {}) {
     S.carry = null;
     vm.setHeld(null);
     if (it.obj) it.obj.removeFromParent();
+    deliver(c, tk, it);
+  }
+
+  function deliver(c, tk, it) {
     if (it.ticket && it.ticket !== tk) it.ticket.item = null;
     c.hop = 1;
     const frac = clamp(c.patience / c.maxPatience, 0, 1);
     const base = 8 + tk.steps.length * 5 + it.stars * 6 + Math.ceil(frac * 10) + (tk.variant && tk.variant.kind !== 'rush' ? 6 : 0);
-    let mul = coinMul() * c.coinBonus;
+    let mul = coinMul() * c.coinBonus * COIN_SCALE;
     if (tk.special) mul *= has('chalkboard') ? 2 : 1.5;
     const earned = Math.round(base * mul);
-    const tipCoins = it.stars === 3 && has('tipjar') ? 12 : 0;
+    const tipCoins = it.stars === 3 && has('tipjar') ? TIP : 0;
     S.coins += earned + tipCoins;
     S.served += 1;
     const R = S.report;
@@ -621,7 +676,9 @@ async function start(hotData = {}) {
     c.t = 0;
     c.bub.hidden = true;
     c.hl.set(false);
-    const lines = { 3: ['Perfect!', 'Just like grandma makes!', 'The best in the hills!'], 2: ['Yummy!', 'So tasty!'], 1: ['A little toasty… but sweet!', 'Mmm, crunchy!'] };
+    const lines = IS_RESTAURANT
+      ? { 3: ['Magnifique!', 'My compliments to the chef!', 'Worth the view!'], 2: ['Delicious!', 'Very nice!'], 1: ['A little overdone… but tasty!', 'Hmm, rustic!'] }
+      : { 3: ['Perfect!', 'Just like grandma makes!', 'The best in the hills!'], 2: ['Yummy!', 'So tasty!'], 1: ['A little toasty… but sweet!', 'Mmm, crunchy!'] };
     say(c, `${stars(it.stars)} ${pick(lines[it.stars])}`, 2.8);
     ui.toast(`${c.name} loved the ${it.d.name}! ${stars(it.stars)} +${earned} coins${extra}`, 'good');
   }
@@ -702,6 +759,218 @@ async function start(hotData = {}) {
     }
   }
 
+
+  // ---------------------------------------------------------------- waiters (the restaurant)
+  // Waiters take orders at the tables, carry the tickets to the pass, and run
+  // finished plates from the pass to the guests. You cook; they serve.
+
+  const waiters = [];
+  const WAITER_LOOK = [['cat', 'Pierre', '#F4A646'], ['bunny', 'Lulu', '#FFF3E6'], ['puppy', 'Basil', '#D9A05B']];
+
+  function trayModel() {
+    const g = new THREE.Group();
+    g.add(mk(G.cyl(0.2, 0.2, 0.016, 0.006, 28), '#C9D4D9', { outline: 'thin', cast: false }));
+    const rim = mk(G.torus(0.2, 0.008, Math.PI * 2, 32), '#DCE6EA', { outline: false, cast: false });
+    rim.rotation.x = Math.PI / 2;
+    rim.position.y = 0.01;
+    g.add(rim);
+    return g;
+  }
+
+  function hireWaiters() {
+    if (!IS_RESTAURANT) return;
+    const want = has('waiter') ? 3 : 2;
+    while (waiters.length < want) {
+      const i = waiters.length;
+      const [kind, name] = WAITER_LOOK[i];
+      const a = makeAnimal(kind, { accessories: ['waiter', 'bowtie'], bowColor: '#B9284A' });
+      a.root.traverse((m) => { m.castShadow = false; });
+      const home = W.waiterHomes[i].clone();
+      a.root.position.copy(home);
+      a.root.rotation.y = Math.PI / 2;
+      scene.add(a.root);
+      const tray = trayModel();
+      tray.position.set(0.05, 0.52, 0.34);
+      tray.visible = false;
+      a.bob.add(tray);
+      const w = { a, name, home, path: [], task: null, state: 'idle', t: 0, plate: null, tray, look: Math.PI / 2 };
+      waiters.push(w);
+      if (S.mode !== 'title' && i > 1) fx.puff(home.clone().setY(0.4), 6, 0.4);
+    }
+  }
+
+  const inLane = (p) => p.x < 1.4;
+  /** Waypoints through the dining room: the lane by the pass, the cross aisle, the middle aisle. */
+  function route(from, to) {
+    const { laneX, aisleX, crossZ } = W.nav;
+    const pts = [];
+    if (inLane(from) && inLane(to)) pts.push(to.clone());
+    else if (inLane(from)) pts.push(V3(laneX, 0, crossZ), V3(aisleX, 0, crossZ), V3(aisleX, 0, to.z), to.clone());
+    else if (inLane(to)) pts.push(V3(aisleX, 0, from.z), V3(aisleX, 0, crossZ), V3(laneX, 0, crossZ), to.clone());
+    else pts.push(V3(aisleX, 0, from.z), V3(aisleX, 0, to.z), to.clone());
+    return pts;
+  }
+
+  function sendWaiter(w, to, then) {
+    w.path = route(w.a.root.position, to);
+    w.state = 'walk';
+    w.then = then;
+  }
+
+  const waitingFor = (c) => S.customers.includes(c) && c.state === 'wait';
+
+  /** Which waiting guest a finished plate on the pass is for. */
+  function passTarget(it) {
+    const busy = new Set(waiters.filter((w) => w.task && w.task.tk).map((w) => w.task.tk));
+    for (const st of W.passes || []) if (st.item && st.item !== it && st.item.passFor) busy.add(st.item.passFor.tk);
+    if (it.ticket && !busy.has(it.ticket) && waitingFor(it.ticket.customer)) return { c: it.ticket.customer, tk: it.ticket };
+    for (const c of S.customers) {
+      if (!waitingFor(c)) continue;
+      const tk = c.tickets.find((t) => t.d.id === it.d.id && (!t.item || t.item === it) && !busy.has(t));
+      if (tk) return { c, tk };
+    }
+    return null;
+  }
+
+  function nextWaiterTask() {
+    const taken = new Set(waiters.map((w) => w.task && (w.task.st || w.task.c)).filter(Boolean));
+    // plates first, while they're hot
+    for (const st of W.passes || []) {
+      if (!st.item || taken.has(st)) continue;
+      const pf = st.item.passFor;
+      if ((pf && waitingFor(pf.c)) || passTarget(st.item)) return { kind: 'deliver', st };
+    }
+    const ready = S.customers.filter((c) => c.state === 'ready' && !taken.has(c));
+    if (ready.length) return { kind: 'take', c: ready[0] };
+    return null;
+  }
+
+  function startWaiterTask(w, task) {
+    w.task = task;
+    if (task.kind === 'take') {
+      const c = task.c;
+      sendWaiter(w, c.seat.stand, () => {
+        if (!S.customers.includes(c) || c.state !== 'ready') return waiterDone(w);
+        w.look = Math.atan2(c.seat.x - w.a.root.position.x, c.seat.z - w.a.root.position.z);
+        w.state = 'pause';
+        w.t = 1.3;
+        noteOrder(c);
+        w.then = () => {
+          // back to the kitchen with the ticket
+          const pass = (W.passes && W.passes[1]) || null;
+          sendWaiter(w, pass ? pass.pickup : w.home, () => {
+            if (S.customers.includes(c) && c.pending) {
+              postOrder(c);
+              sfx.bell();
+              ui.toast(`Order in! ${c.tickets.map((t) => t.d.name).join(' and ')} for ${c.name}.`, 'good');
+            }
+            waiterDone(w);
+          });
+        };
+      });
+    } else if (task.kind === 'deliver') {
+      const st = task.st;
+      sendWaiter(w, st.pickup, () => {
+        const it = st.item;
+        if (!it) return waiterDone(w);
+        const target = it.passFor && waitingFor(it.passFor.c) ? it.passFor : passTarget(it);
+        if (!target) return waiterDone(w);
+        // pick the plate up onto the tray
+        st.item = null;
+        st.bounce = 1;
+        it.where = 'waiter';
+        it.station = null;
+        if (it.obj) it.obj.removeFromParent();
+        const plate = dessertModel(it.d, { burnt: it.burnt, tops: itemLook(it).tops });
+        plate.scale.setScalar(0.85);
+        plate.position.set(0, 0.01, 0);
+        w.tray.add(plate);
+        w.tray.visible = true;
+        w.plate = plate;
+        w.task = { ...task, it, c: target.c, tk: target.tk };
+        sfx.pop();
+        sendWaiter(w, target.c.seat.stand, () => {
+          const c = w.task.c;
+          w.tray.visible = false;
+          if (w.plate) { w.plate.removeFromParent(); w.plate = null; }
+          if (waitingFor(c) && c.tickets.includes(w.task.tk)) {
+            w.look = Math.atan2(c.seat.x - w.a.root.position.x, c.seat.z - w.a.root.position.z);
+            deliver(c, w.task.tk, it);
+          } else {
+            // the guest gave up: the plate goes back on the pass for the next order
+            const free = (W.passes || []).find((p) => !p.item);
+            if (free) {
+              it.where = 'station';
+              it.station = free;
+              it.passFor = null;
+              free.item = it;
+              placeItem(it);
+            } else if (it.ticket) it.ticket.item = null;
+          }
+          w.state = 'pause';
+          w.t = 0.6;
+          w.then = () => waiterDone(w);
+        });
+      });
+    }
+  }
+
+  function waiterDone(w) {
+    w.task = null;
+    w.state = 'idle';
+    if (w.a.root.position.distanceTo(w.home) > 0.1) {
+      const task = nextWaiterTask();
+      if (task) return startWaiterTask(w, task);
+      sendWaiter(w, w.home, () => { w.state = 'idle'; w.look = Math.PI / 2; });
+    }
+  }
+
+  function updateWaiters(dt) {
+    const speed = 1.8 * (has('runners') ? 1.4 : 1);
+    for (const w of waiters) {
+      const r = w.a.root;
+      let moving = false;
+      if (w.state === 'idle' && S.mode !== 'title') {
+        const task = nextWaiterTask();
+        if (task) startWaiterTask(w, task);
+      }
+      if (w.state === 'walk') {
+        const target = w.path[0];
+        const d = V3(target.x - r.position.x, 0, target.z - r.position.z);
+        const dist = d.length();
+        if (dist < 0.05) {
+          w.path.shift();
+          if (!w.path.length) {
+            w.state = 'arrived';
+            const then = w.then;
+            w.then = null;
+            if (then) then();
+            if (w.state === 'arrived') w.state = 'idle';
+          }
+        } else {
+          d.normalize();
+          r.position.addScaledVector(d, Math.min(dist, speed * dt));
+          w.look = Math.atan2(d.x, d.z);
+          moving = true;
+        }
+      } else if (w.state === 'pause') {
+        w.t -= dt;
+        if (w.t <= 0) {
+          w.state = 'arrived';
+          const then = w.then;
+          w.then = null;
+          if (then) then();
+          if (w.state === 'arrived') w.state = 'idle';
+        }
+      }
+      r.rotation.y += angleDiff(w.look, r.rotation.y) * Math.min(1, dt * 10);
+      // a little bow while writing an order down
+      const writing = w.state === 'pause' && w.task && w.task.kind === 'take';
+      w.a.headG.rotation.x += ((writing ? 0.25 : 0) - w.a.headG.rotation.x) * Math.min(1, dt * 8);
+      animateAnimal(w.a, dt, S.time, moving, 1, { look: 0, wave: false });
+    }
+  }
+
   // ---------------------------------------------------------------- the shop day
 
   const shop = new Shop({
@@ -712,6 +981,7 @@ async function start(hotData = {}) {
         applyDecor();
         ui.toast(`${DECOR.find((d) => d.id === id).name} added to the shop!`, 'unlock');
       } else sfx.coin();
+      if (id === 'waiter') hireWaiters();
       ui.stats(S.coins, S.served);
       save();
     },
@@ -719,6 +989,7 @@ async function start(hotData = {}) {
     onShop: () => openMarket(false),
   });
   shop.bind(S);
+  hireWaiters();
 
   function applyDecor() {
     decorPieces.set(S.decor, W.colliders);
@@ -904,12 +1175,21 @@ async function start(hotData = {}) {
     if (t.kind === 'sign') return S.phase === 'morning' ? 'Flip the sign to Open' : S.phase === 'open' ? 'Open until 5 PM' : 'Closed for the day';
     if (t.kind === 'customer') {
       const c = t.c;
+      if (IS_RESTAURANT) {
+        if (c.state === 'ready') return `${c.name} is waiting for a waiter`;
+        return `${c.name} is waiting for the ${c.tickets.map((t) => t.d.name).join(' and the ') || c.order.name}`;
+      }
       if (c.state === 'ready') return `Take ${c.name}'s order`;
       if (ticketFor(c, it)) return `Serve the ${it.d.name} to ${c.name}`;
       return `${c.name} is waiting for the ${c.tickets.map((t) => t.d.name).join(' and the ') || c.order.name}`;
     }
     const st = t.station;
-    if (st.type === 'scrap') return it ? `Toss the ${it.d.name}` : 'Scrap Basket';
+    if (st.type === 'scrap') return it ? `Toss the ${it.d.name}` : st.name;
+    if (st.type === 'pass') {
+      if (st.item) return !it && !waiters.some((w) => w.task && w.task.st === st) ? `Take back the ${st.item.d.name}` : `The ${st.item.d.name} is waiting for a waiter`;
+      if (it && isDone(it)) return `Send out the ${it.d.name}`;
+      return 'The Pass';
+    }
     if (st.type === 'spot') {
       if (st.item && !it) return `Pick up the ${st.item.d.name}`;
       if (!st.item && it) return `Set down the ${it.d.name}`;
@@ -928,7 +1208,7 @@ async function start(hotData = {}) {
     }
     if (it && !isDone(it)) {
       const s = curStep(it);
-      if (s.station === st.type) return s.t === 'decor' ? `Decorate the ${it.d.name}` : s.label;
+      if (s.station === st.type) return s.t === 'decor' ? `${IS_RESTAURANT ? 'Plate' : 'Decorate'} the ${it.d.name}` : s.label;
     }
     return st.name;
   }
@@ -993,10 +1273,10 @@ async function start(hotData = {}) {
       if (it.raw.size) {
         sfx.ding();
         ui.toast(`Got everything! Now ${nextStepText(it)}.`, 'good');
-        tip('mise', 'Some ingredients need prepping first. Take the bowl to the Island in the middle of the kitchen.');
+        tip('mise', `Some ingredients need prepping first. Take the bowl to the ${STATIONS.prep.name} in the middle of the kitchen.`);
       } else finishGather(it);
     } else if (it.raw.has(ing.id)) {
-      tip('mise', `${ing.name} needs prepping at the Island before it goes in. You can prep now or after gathering.`);
+      tip('mise', `${ing.name} needs prepping at the ${STATIONS.prep.name} before it goes in. You can prep now or after gathering.`);
     }
     placeItem(it);
   }
@@ -1010,6 +1290,13 @@ async function start(hotData = {}) {
   }
 
   function talkTo(c) {
+    if (IS_RESTAURANT) {
+      const want = c.tickets.map((t) => t.d.name).join(' and the ');
+      say(c, c.state === 'ready' ? pick(['Good evening, chef! A waiter will be right with us.', 'What a view!']) : want ? pick([`Looking forward to the ${want}!`, 'Is that the sunset? Wonderful.']) : 'Just deciding…', 2.2);
+      if (S.carry && isDone(S.carry)) ui.toast('Put finished plates on the pass. The waiters serve the tables.');
+      sfx.pop();
+      return;
+    }
     if (c.state === 'ready') return takeOrder(c);
     const it = S.carry;
     if (c.tickets.length) S.activeId = c.tickets[0].id;
@@ -1027,13 +1314,14 @@ async function start(hotData = {}) {
 
   function stationHint(st) {
     return {
-      mix: 'The Mixing Bowl mixes, kneads and whips. Bring a bowl of ingredients.',
-      prep: 'The Prep Island is for rolling, chopping, scooping and filling.',
-      bake: 'The Oven bakes. Take things out while they are golden!',
-      cook: 'The Stove fries and melts. Stir when the pot calls you.',
-      chill: 'The Freezer chills and sets desserts.',
-      decor: 'The Decorating Table adds toppings from the recipe card.',
-      scrap: 'The Scrap Basket is for treats that went wrong.',
+      mix: `The ${st.name} mixes, kneads and whips. Bring a bowl of ingredients.`,
+      prep: `The ${st.name} is for rolling, chopping, scooping and filling.`,
+      bake: `The ${st.name} bakes and roasts. Take things out while they are golden!`,
+      cook: `The ${st.name} simmers, sears and fries. Stir or flip when it calls you.`,
+      chill: `The ${st.name} chills and sets ${IS_RESTAURANT ? 'dishes' : 'desserts'}.`,
+      decor: IS_RESTAURANT ? 'The Plating Station adds garnishes from the ticket.' : 'The Decorating Table adds toppings from the recipe card.',
+      scrap: `The ${st.name} is for ${IS_RESTAURANT ? 'dishes' : 'treats'} that went wrong.`,
+      pass: 'The Pass: put finished plates here and a waiter carries them to the table.',
       spot: 'A spot to set things down while your paws are busy.',
     }[st.type];
   }
@@ -1060,6 +1348,7 @@ async function start(hotData = {}) {
       st.bounce = 1;
       return ui.toast(`Tossed the ${it.d.name}. You can start it again from its ticket.`);
     }
+    if (st.type === 'pass') return usePass(st);
     if (st.type === 'spot') {
       if (st.item && !it) {
         const si = st.item;
@@ -1137,6 +1426,39 @@ async function start(hotData = {}) {
     }
     if (st.type === 'cook') ui.toast(st.cookMode === 'pan' ? `Frying the ${it.d.name}. Flip it when the pan sizzles!` : st.cookMode === 'toast' ? 'Toasting the marshmallow. Turn it when it starts to brown!' : `${step.label}. Stir when the pot bubbles!`);
     if (st.type === 'chill') ui.toast(`Chilling the ${it.d.name}…`);
+  }
+
+  /** Finished plates go on the pass; a waiter carries them out. */
+  function usePass(st) {
+    const it = S.carry;
+    if (st.item) {
+      const si = st.item;
+      const coming = waiters.some((w) => w.task && w.task.st === st);
+      if (!it && !coming) {
+        st.item = null;
+        si.passFor = null;
+        toHands(si);
+        sfx.pop();
+        return;
+      }
+      return nope(coming ? `${waiters.find((w) => w.task && w.task.st === st).name} is coming for the ${si.d.name}.` : 'That spot on the pass is taken.');
+    }
+    if (!it) return ui.toast(stationHint(st));
+    if (!isDone(it)) return nope(`The ${it.d.name} isn't ready yet: ${nextStepText(it)}.`);
+    const target = passTarget(it);
+    if (!target) return nope(`Nobody is waiting for the ${it.d.name} right now. Set it on a counter spot for the next order.`);
+    S.carry = null;
+    vm.setHeld(null);
+    it.where = 'station';
+    it.station = st;
+    it.passFor = target;
+    st.item = it;
+    st.bounce = 1;
+    placeItem(it);
+    sfx.bell();
+    fx.sparkles(st.slot.clone().setY(st.slot.y + 0.25), 6, 0.3);
+    ui.toast(`Order up! ${target.tk.d.name} for ${target.c.name}.`, 'good');
+    tip('pass', 'A waiter will pick the plate up and carry it to the table.');
   }
 
   const stirWord = (st) => (st.cookMode === 'pan' ? 'Flip' : st.cookMode === 'toast' ? 'Turn' : 'Stir');
@@ -2360,7 +2682,23 @@ async function start(hotData = {}) {
   refreshMute();
   muteBtn.addEventListener('click', () => { unlockAudio(); setMuted(!isMuted()); refreshMute(); muteBtn.blur(); });
   $('#startBtn').addEventListener('click', startGame);
-  if (S.served > 0 || S.day > 1) $('#startBtn').textContent = `Reopen the shop · Day ${S.day}`;
+  // the title card: which venue, and how far along each one is
+  if (IS_RESTAURANT) {
+    $('#titleEyebrow').textContent = 'A first-person cooking game';
+    $('#titleName').innerHTML = 'Lantern <span>Cliff</span>';
+    $('#titleLede').textContent = 'Run the open kitchen of a seaside restaurant at sunset. Cook 21 dishes while your waiters take orders and carry plates to the tables.';
+    $('#startBtn').textContent = 'Open the restaurant';
+    document.title = 'Lantern Cliff · Hillside Bakery';
+  }
+  if (S.served > 0 || S.day > 1) $('#startBtn').textContent = `Reopen the ${WORDS.shop} · Day ${S.day}`;
+  for (const b of document.querySelectorAll('.venue')) {
+    const v = b.dataset.venue;
+    b.setAttribute('aria-checked', String(v === VENUE));
+    let day = 0;
+    try { day = (JSON.parse(localStorage.getItem(v === 'restaurant' ? 'hillside-restaurant-save' : 'hillside-bakery-save') || '{}') || {}).day | 0; } catch { day = 0; }
+    if (day > 1) b.querySelector('small').textContent += ` · Day ${day}`;
+    b.addEventListener('click', () => { if (v !== VENUE) switchVenue(v); });
+  }
   pauseEl.addEventListener('click', resume);
   ui.ticketsEl.addEventListener('click', (e) => {
     const t = e.target.closest('.ticket');
@@ -2457,15 +2795,16 @@ async function start(hotData = {}) {
     const it = S.carry;
     if (!it) {
       if (!S.tickets.length) {
-        if (S.phase === 'morning') return 'Morning prep. Flip the sign on the front door to open the shop.';
-        if (S.phase === 'closing') return 'Closing time. The last customers are heading home.';
+        if (S.phase === 'morning') return `${IS_RESTAURANT ? 'Evening prep' : 'Morning prep'}. Flip the sign on the front door to open the ${WORDS.shop}.`;
+        if (S.phase === 'closing') return IS_RESTAURANT ? 'Last service. The final guests are finishing up.' : 'Closing time. The last customers are heading home.';
+        if (IS_RESTAURANT) return S.customers.some((c) => c.state === 'ready' || c.pending) ? 'A waiter is taking an order…' : 'Waiting for guests…';
         return S.customers.some((c) => c.state === 'ready')
           ? `A customer is ready to order. Look at them and press <kbd>${input.coarse ? 'Use' : 'E'}</kbd>`
           : 'Waiting for customers…';
       }
       const tk = activeTicket();
       if (tk && !tk.item) return `Next: gather for the <b>${tk.d.name}</b> in ${stepWhere(tk.steps[0])}.`;
-      if (tk && tk.item) return `The <b>${tk.d.name}</b> is ${tk.item.station && tk.item.station.type === 'spot' ? 'resting on the island' : tk.item.station ? `at the ${tk.item.station.name}` : 'waiting'}.`;
+      if (tk && tk.item) return `The <b>${tk.d.name}</b> is ${tk.item.where === 'waiter' ? 'on its way to the table' : tk.item.station && tk.item.station.type === 'spot' ? 'resting on the counter' : tk.item.station && tk.item.station.type === 'pass' ? 'on the pass' : tk.item.station ? `at the ${tk.item.station.name}` : 'waiting'}.`;
       return '';
     }
     return `<img src="${dessertURL(it.d)}" alt=""><span>Carrying <b>${it.d.name}</b> · ${nextStepText(it)}</span>`;
@@ -2530,6 +2869,7 @@ async function start(hotData = {}) {
 
     updateStations(dt);
     updateCustomers(dt);
+    updateWaiters(dt);
     fx.update(dt);
     ui.tick(dt);
 
@@ -2635,7 +2975,7 @@ async function start(hotData = {}) {
     cam.updateMatrixWorld();
   }
   window.__bakery = {
-    S, W, renderer, stations, cam, input, ui, vm, P, fx, placeItem,
+    S, W, renderer, stations, cam, input, ui, vm, P, fx, placeItem, waiters,
     setView: (x, z, y, p) => { P.set(x, 0, z); yaw = y; if (p !== undefined) pitch = p; },
     lookAt: (x, y, z) => {
       const dx = x - P.x, dz = z - P.z;

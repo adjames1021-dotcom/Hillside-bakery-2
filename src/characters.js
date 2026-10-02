@@ -214,6 +214,26 @@ export function makeAnimal(kind, o = {}) {
     pocket.position.set(0, -0.05, 0.03);
     apron.add(pocket);
   }
+  if (acc.includes('waiter')) {
+    // a navy waistcoat over a crisp white shirt, and a towel over one arm
+    const vest = mk(G.box(0.34, 0.3, 0.06, 0.03), '#2E4258', { outline: 'thin' });
+    vest.position.set(0, 0.36, 0.165);
+    vest.rotation.x = -0.1;
+    bob.add(vest);
+    const shirt = mk(G.cyl(0.001, 0.07, 0.16, 0.002, 3), '#FFFBF0', { outline: false });
+    shirt.rotation.set(Math.PI - 0.1, 0, 0);
+    shirt.position.set(0, 0.43, 0.2);
+    shirt.scale.z = 0.3;
+    bob.add(shirt);
+    for (const y of [0.33, 0.27]) {
+      const btn = mk(G.sphere(0.012, 6, 4), '#D9A441', { outline: false });
+      btn.position.set(0, y, 0.2);
+      bob.add(btn);
+    }
+    const towel = mk(G.box(0.08, 0.16, 0.05, 0.02), '#FFFFFF', { outline: 'thin' });
+    towel.position.set(-0.27, 0.3, 0.06);
+    bob.add(towel);
+  }
   if (acc.includes('bowtie')) {
     const col = o.bowColor || [C.blueDeep, C.pinkDeep, C.cherry][Math.floor(Math.random() * 3)];
     for (const sx of [-1, 1]) {

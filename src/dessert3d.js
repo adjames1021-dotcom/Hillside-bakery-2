@@ -1560,7 +1560,8 @@ function genericToppings(g, list, c) {
   for (const t of list) {
     const tg = add(g, new THREE.Group());
     tg.userData.topping = t;
-    if (t === 'sprinkles') {
+    if (GARNISH[t]) GARNISH[t](tg, { hits, pick, on, peak, r, rand, surface, cx, cz, hx, hz, c });
+    else if (t === 'sprinkles') {
       for (const h of pick(26)) {
         const s = add(tg, part(G.capsule(0.0032, 0.009), SPR[Math.floor(rand() * SPR.length)], false), ...on(h, 0.003).toArray());
         s.rotation.set(rand() * 3, rand() * 3, rand() * 3);
@@ -1590,6 +1591,22 @@ function genericToppings(g, list, c) {
     }
   }
 }
+
+// ------------------------------------------------------------------ extensions
+// The restaurant registers its dish templates, garnishes and bowl bits here.
+
+const GARNISH = {};
+export function registerDishes({ templates = {}, spec = {}, bits = {}, garnish = {} }) {
+  Object.assign(T, templates);
+  Object.assign(SPEC, spec);
+  Object.assign(BIT, bits);
+  Object.assign(GARNISH, garnish);
+}
+/** The shape helpers templates are built from. */
+export const H = {
+  add, part, base, plate, board, glass, swirl, lumpyGeo, cookieGeo, starGeo, crimpGeo, lattice, dotsOn, drizzle, smooth,
+  cherry, berry, berryHalf, bananaSlice, shineDabs, fillShine, stripeMat, fluted, mixHex, rng, TAU, V,
+};
 
 // ------------------------------------------------------------------ building
 

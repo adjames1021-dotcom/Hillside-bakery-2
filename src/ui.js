@@ -3,14 +3,15 @@
 import * as THREE from 'three';
 import { DESSERTS, BY_ID, CATEGORIES, STATIONS, TOPPINGS, TOPPING_BY_ID, ING_PREP, dessertURL, toppingURL } from './desserts.js';
 import { ING_BY_ID, ingredientURL } from './ingredients.js';
+import { WORDS } from './venue.js';
 
 const $ = (s) => document.querySelector(s);
 const v3 = new THREE.Vector3();
 
 function gatherZone(items) {
   const zones = new Set(items.map((id) => ING_BY_ID[id].zone));
-  if (zones.size === 2) return 'Dry + Cold Storage';
-  return zones.has('cold') ? 'Cold Storage' : 'Dry Storage';
+  if (zones.size === 2) return WORDS.storage;
+  return zones.has('cold') ? WORDS.cold.replace(/^the /, '') : WORDS.dry.replace(/^the /, '');
 }
 
 export function stepWhere(s) {
@@ -21,6 +22,8 @@ const LAYER_COLORS = {
   Bananas: '#FFE27A', Custard: '#FFE9A0', Wafers: '#E9C27E', 'Red layer': '#C84A4A', Frosting: '#FFF6E4',
   Sponge: '#F8DE9C', 'Chocolate layer': '#6A4029', Fudge: '#4E2B1C', Biscuit: '#E9B06A', Strawberries: '#E4605E',
   Graham: '#D9A05B', Chocolate: '#5A3422', Marshmallow: '#FFFBF0',
+  Tomato: '#E4483E', Mozzarella: '#FFFBF0', Basil: '#5E9F4E', Flour: '#FFF6E4', Egg: '#FFC940', Crumbs: '#D9A05B',
+  Salmon: '#F6A07E', Shrimp: '#F4956A',
 };
 export const layerColor = (l) => LAYER_COLORS[l] || '#F3D9A6';
 
@@ -160,7 +163,7 @@ export class UI {
     const stepIdx = item ? item.step : 0;
     const got = item ? item.got : new Set();
     const raw = item ? item.raw : new Set();
-    const where = !item ? 'not started' : item.where === 'hands' ? 'in your paws' : item.station && item.station.type === 'spot' ? 'resting on the island' : `at the ${item.station.name}`;
+    const where = !item ? 'not started' : item.where === 'hands' ? 'in your paws' : item.where === 'waiter' ? 'on its way to the table' : !item.station ? 'waiting' : item.station.type === 'spot' ? 'resting on the counter' : item.station.type === 'pass' ? 'on the pass' : `at the ${item.station.name}`;
     let body;
     if (active) {
       const steps = tk.steps.map((s, i) => {
@@ -179,7 +182,7 @@ export class UI {
         } else if (s.t === 'decor') {
           icons = `<span class="icons">${s.tops.map((t) => `<img src="${toppingURL(TOPPING_BY_ID[t])}" alt="${TOPPING_BY_ID[t].name}" title="${TOPPING_BY_ID[t].name}">`).join('')}</span>`;
         }
-        const label = s.t === 'gather' ? 'Gather' : s.t === 'decor' ? 'Decorate' : s.label;
+        const label = s.t === 'gather' ? 'Gather' : s.t === 'decor' ? STATIONS.decor.short : s.label;
         return `<li class="${cls}"><span class="st-top"><b>${label}</b><em>${stepWhere(s)}</em></span>${icons}</li>`;
       }).join('');
       body = `<ol class="tsteps">${steps}</ol>`;
@@ -376,7 +379,7 @@ export class UI {
         let icons = '';
         if (s.t === 'gather') icons = s.items.map((id) => `<span class="ing got ${s.needsPrep.includes(id) ? 'prep' : ''}"><img src="${ingredientURL(ING_BY_ID[id])}" alt="${ING_BY_ID[id].name}" title="${ING_BY_ID[id].name}${s.needsPrep.includes(id) ? ` (${ING_PREP[id].label.toLowerCase()} at the Island)` : ''}"></span>`).join('');
         if (s.t === 'decor') icons = s.tops.map((t) => `<img src="${toppingURL(TOPPING_BY_ID[t])}" alt="${TOPPING_BY_ID[t].name}" title="${TOPPING_BY_ID[t].name}">`).join('');
-        const label = s.t === 'gather' ? 'Gather' : s.t === 'decor' ? 'Decorate' : s.label;
+        const label = s.t === 'gather' ? 'Gather' : s.t === 'decor' ? STATIONS.decor.short : s.label;
         return `<li><b>${label}</b> <em>${stepWhere(s)}</em>${icons ? `<span class="icons">${icons}</span>` : ''}</li>`;
       }).join('');
       return `<article class="card ${locked ? 'locked' : ''}" id="card-${d.id}">

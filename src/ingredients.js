@@ -1,5 +1,7 @@
 // Pantry ingredients: 21 in Dry Storage (shelf cubbies + produce crates) and
 // 12 in Cold Storage (glass-door fridge). Each has a sticker icon and a little 3D model.
+import { IS_RESTAURANT } from './venue.js';
+import { R_ING_DEF, R_ING_ICON } from './rest_data.js';
 import * as THREE from 'three';
 import { mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 import { G, C, INK, mk, toon, canvasTex } from './toon.js';
@@ -316,7 +318,7 @@ const DEF = [
   ['ice-cream', 'Ice Cream', 'cold', '#F9C8D0', '#FFF1D6'],
 ];
 
-export const INGREDIENTS = DEF.map(([id, name, zone, color, bit], i) => ({ id, name, zone, color, bit, n: 200 + i, draw: ICON[id] }));
+export const INGREDIENTS = (IS_RESTAURANT ? R_ING_DEF : DEF).map(([id, name, zone, color, bit], i) => ({ id, name, zone, color, bit, n: 200 + i, draw: ICON[id] || R_ING_ICON[id] }));
 export const ING_BY_ID = Object.fromEntries(INGREDIENTS.map((g) => [g.id, g]));
 
 const icoUrl = new Map();
@@ -334,9 +336,13 @@ let atlas = null;
 function buildAtlas() {
   const labels = [
     ...INGREDIENTS.map((g) => [g.id, g.name, 1, '#FFF6E4', INK]),
-    ['sign-dry', 'Dry Storage', 2, '#88AE7B', '#FFF6E4'],
-    ['sign-cold', 'Cold Storage', 2, '#86BADB', '#FFF6E4'],
-    ['sign-island', 'Prep Island', 2, '#E8893A', '#FFF6E4'],
+    ['sign-dry', IS_RESTAURANT ? 'Pantry' : 'Dry Storage', 2, IS_RESTAURANT ? '#3E5C76' : '#88AE7B', '#FFF6E4'],
+    ['sign-cold', IS_RESTAURANT ? 'Cold Room' : 'Cold Storage', 2, '#86BADB', '#FFF6E4'],
+    ['sign-island', IS_RESTAURANT ? 'Prep Counter' : 'Prep Island', 2, IS_RESTAURANT ? '#D9A441' : '#E8893A', '#FFF6E4'],
+    ['sign-pass', 'The Pass', 2, '#3E5C76', '#FFF6E4'],
+    ['sack-rice', 'ARBORIO', 1, '#FFF6E4', INK],
+    ['jar-pasta', 'Spaghetti', 1, '#FFF6E4', INK],
+    ['bottle-oil', 'Olio', 1, '#FFF6E4', INK],
     ['sign-welcome', 'welcome', 1, '#F7B9C4', INK],
     ['sack-flour', 'FLOUR', 1, '#FFF6E4', INK],
     ['sack-sugar', 'SUGAR', 1, '#FFF6E4', INK],
@@ -1249,6 +1255,12 @@ export function ingredientModel(id) {
   return MODEL[id]();
 }
 
+/** Lets other modules (the restaurant's) add shelf and cutting-board models. */
+export function registerIngredientModels(models, prep = {}) {
+  Object.assign(MODEL, models);
+  Object.assign(PREP, prep);
+}
+
 /** One or two of an ingredient, for the cutting board while you prep it. */
 const PREP = {
   apples: () => fruit(0.045, '#E4605E', { shape: 'apple', stem: true, leaf: true, blush: '#F08A7E' }),
@@ -1358,3 +1370,6 @@ export function ingredientBit(id) {
   return g ? g.bit : '#FFF3DC';
 }
 
+
+// building blocks the restaurant's pantry is made from
+export { sack3d, glassJar, crate3d, scatter, fruit, bowl3d, bottle3d, berryBasket, lumpy, art, decal, artTitle, profileGeo, smoothGeo };

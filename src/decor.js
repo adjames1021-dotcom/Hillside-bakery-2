@@ -5,6 +5,7 @@ import { G, C, INK, mk, toon, glow, canvasTex } from './toon.js';
 import { FONT } from './props.js';
 import { FP_LAYER } from './world.js';
 import { dessertCanvas } from './desserts.js';
+import { IS_RESTAURANT } from './venue.js';
 
 const put = (parent, obj, x = 0, y = 0, z = 0) => { obj.position.set(x, y, z); parent.add(obj); return obj; };
 
@@ -153,6 +154,7 @@ function shopCat() {
 
 /** Builds every decor piece (hidden). Call set(owned) to show the ones you own. */
 export function buildDecorPieces(scene) {
+  if (IS_RESTAURANT) return buildRestaurantDecor(scene);
   const pieces = {};
   const glows = [];
   const add = (id, group, colliders = [], fp = false) => {
@@ -216,6 +218,163 @@ export function buildDecorPieces(scene) {
       ln.children.forEach((l, i) => { l.rotation.z = Math.sin(t * 0.7 + i) * 0.04; });
     },
     catHead: () => cat.head.getWorldPosition(new THREE.Vector3()),
+  };
+}
+
+// ------------------------------------------------------------------ the restaurant's decor
+
+const TABLES = [[2.0, -2.0], [4.6, -2.0], [2.0, 1.6], [4.6, 1.6]];
+const BRASS = '#D9A441';
+
+function candles() {
+  const g = new THREE.Group();
+  const flames = [];
+  put(g, mk(G.cyl(0.07, 0.08, 0.02, 0.008, 16), BRASS, { outline: 'thin' }), 0, 0.01, 0);
+  [[0, 0.16], [0.04, 0.11], [-0.035, 0.09]].forEach(([x, h], i) => {
+    const z = i === 2 ? 0.03 : i ? -0.02 : 0;
+    put(g, mk(G.cyl(0.014, 0.014, h, 0.005, 10), '#FFFBF0', { outline: 'thin' }), x, 0.02 + h / 2, z);
+    const f = put(g, mk(G.sphere(0.012, 8, 6), '#FFC940', { outline: false, emissive: '#FFB040', emissiveIntensity: 1 }), x, 0.035 + h, z);
+    f.scale.y = 1.7;
+    const gl = glow('#FFC060', 0.28, 0.6);
+    put(g, gl, x, 0.04 + h, z);
+    flames.push({ f, gl });
+  });
+  return { g, flames };
+}
+
+function roseVase() {
+  const g = new THREE.Group();
+  put(g, mk(G.lathe([[0.0005, 0], [0.03, 0], [0.04, 0.05], [0.022, 0.1], [0.026, 0.12], [0.02, 0.12], [0.016, 0.1], [0.0005, 0.1]].map(([x, y]) => new THREE.Vector2(x, y)), 18), '#DDF0F6', { outline: 'thin' }));
+  for (const [x, z, h] of [[0, 0, 0.2], [0.03, 0.01, 0.17], [-0.025, 0.02, 0.18]]) {
+    put(g, mk(G.cyl(0.003, 0.003, h, 0.001, 5), '#5E8F3E', { outline: false }), x * 0.5, h / 2 + 0.02, z * 0.5);
+    const bloom = put(g, mk(G.sphere(0.022, 12, 10), '#D8405A', { outline: 'thin' }), x, h + 0.02, z);
+    bloom.scale.y = 0.8;
+    put(g, mk(G.torus(0.012, 0.004, Math.PI * 1.6, 10), '#B9284A', { outline: false }), x, h + 0.035, z).rotation.x = Math.PI / 2;
+  }
+  return g;
+}
+
+function grandPiano() {
+  const g = new THREE.Group();
+  const shape = new THREE.Shape();
+  shape.moveTo(-0.7, -0.5);
+  shape.lineTo(0.7, -0.5);
+  shape.lineTo(0.7, 0.1);
+  shape.bezierCurveTo(0.7, 0.9, 0.1, 0.4, -0.25, 0.9);
+  shape.bezierCurveTo(-0.55, 1.1, -0.7, 0.9, -0.7, 0.6);
+  shape.lineTo(-0.7, -0.5);
+  const body = new THREE.ExtrudeGeometry(shape, { depth: 0.32, bevelEnabled: true, bevelThickness: 0.03, bevelSize: 0.03, bevelSegments: 2, curveSegments: 16 });
+  body.rotateX(-Math.PI / 2);
+  put(g, mk(body, '#2E2A30', { outline: 'mid' }), 0, 0.62, 0);
+  for (const [x, z] of [[-0.62, 0.42], [0.62, 0.42], [-0.1, -0.75]]) put(g, mk(G.cyl(0.05, 0.04, 0.62, 0.02, 10), '#2E2A30', { outline: 'thin' }), x, 0.31, z);
+  // keys and the open lid
+  put(g, mk(G.box(1.3, 0.04, 0.16, 0.01), '#FFFBF0', { outline: 'thin' }), 0, 0.9, 0.56);
+  for (let i = 0; i < 12; i++) put(g, mk(G.box(0.035, 0.02, 0.09, 0.005), INK, { outline: false }), -0.55 + i * 0.1, 0.925, 0.53);
+  const lid = put(g, mk(new THREE.ShapeGeometry(shape), '#3A3540', { outline: 'thin' }), 0, 0.95, 0);
+  lid.rotation.set(-Math.PI / 2 + 0.7, 0, 0);
+  put(g, mk(G.box(0.4, 0.26, 0.015, 0.006), '#FFFBF0', { outline: 'thin' }), 0, 1.06, 0.42).rotation.x = -0.25;
+  put(g, mk(G.box(0.6, 0.05, 0.3, 0.02), '#2E2A30', { outline: 'thin' }), 0, 0.46, 0.95);
+  const notes = [];
+  for (let i = 0; i < 3; i++) {
+    const n = new THREE.Group();
+    put(n, mk(G.sphere(0.035, 10, 8), BRASS, { outline: 'thin' }), 0, 0, 0).scale.set(1.2, 0.85, 0.6);
+    put(n, mk(G.box(0.012, 0.13, 0.012, 0.004), BRASS, { outline: false }), 0.035, 0.065, 0);
+    g.add(n);
+    notes.push(n);
+  }
+  return { g, notes };
+}
+
+function chandelier() {
+  const g = new THREE.Group();
+  const gl = [];
+  put(g, mk(G.cyl(0.01, 0.01, 0.7, 0.004, 6), INK, { outline: false, cast: false }), 0, -0.35, 0);
+  const ring = put(g, mk(G.torus(0.45, 0.025, Math.PI * 2, 40), BRASS, { outline: 'thin', cast: false }), 0, -0.8, 0);
+  ring.rotation.x = Math.PI / 2;
+  put(g, mk(G.sphere(0.09, 14, 10), BRASS, { outline: 'thin', cast: false }), 0, -0.8, 0);
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * Math.PI * 2;
+    const x = Math.cos(a) * 0.45, z = Math.sin(a) * 0.45;
+    put(g, mk(G.cyl(0.02, 0.02, 0.1, 0.006, 8), '#FFFBF0', { outline: 'thin', cast: false }), x, -0.72, z);
+    const b = put(g, mk(G.sphere(0.028, 8, 6), '#FFE9A8', { outline: false, emissive: '#FFD27A', emissiveIntensity: 1, cast: false }), x, -0.64, z);
+    b.scale.y = 1.5;
+    const glw = glow('#FFD27A', 0.5, 0.55);
+    put(g, glw, x, -0.64, z);
+    gl.push(glw);
+    const drop = put(g, mk(G.cyl(0.0, 0.03, 0.08, 0, 6), '#E6F6FA', { outline: 'thin', cast: false }), Math.cos(a + 0.4) * 0.38, -0.92, Math.sin(a + 0.4) * 0.38);
+    drop.rotation.x = Math.PI;
+  }
+  const big = glow('#FFE0A0', 2.4, 0.4);
+  put(g, big, 0, -0.75, 0);
+  gl.push(big);
+  return { g, glows: gl };
+}
+
+function buildRestaurantDecor(scene) {
+  const pieces = {};
+  const glows = [];
+  const add = (id, group, colliders = [], fp = false) => {
+    scene.add(group);
+    group.visible = false;
+    if (fp) group.traverse((o) => o.layers.set(FP_LAYER));
+    pieces[id] = { group, colliders };
+  };
+  const cand = new THREE.Group();
+  const flames = [];
+  for (const [x, z] of TABLES) {
+    const c = candles();
+    put(cand, c.g, x + 0.14, 0.636, z + 0.08);
+    flames.push(...c.flames);
+  }
+  add('candles', cand);
+  const roses = new THREE.Group();
+  for (const [x, z] of TABLES) put(roses, roseVase(), x - 0.14, 0.636, z - 0.06);
+  add('roses', roses);
+  const piano = grandPiano();
+  put(scene, piano.g, 5.15, 0, 3.85);
+  piano.g.rotation.y = -Math.PI / 2;
+  add('piano', piano.g, [{ type: 'box', x0: 4.4, x1: 5.95, z0: 3.1, z1: 4.6 }]);
+  const cb = chalkboard();
+  put(scene, cb.g, 4.4, 0, -3.95);
+  cb.g.rotation.y = -0.5;
+  add('chalkboard', cb.g, [{ type: 'circle', x: 4.4, z: -3.95, r: 0.35 }]);
+  const ch = chandelier();
+  put(scene, ch.g, 3.3, 3.6, -0.2);
+  glows.push(...ch.glows);
+  add('chandelier', ch.g, [], true);
+
+  const owned = new Set();
+  return {
+    pieces,
+    glows,
+    set(ids, colliders) {
+      for (const [id, p] of Object.entries(pieces)) {
+        const on = ids.includes(id);
+        p.group.visible = on;
+        if (on && !owned.has(id)) colliders.push(...p.colliders);
+        if (on) owned.add(id);
+      }
+    },
+    setSpecial(d) {
+      const old = cb.board.material.map;
+      cb.board.material.map = specialTex(d);
+      cb.board.material.needsUpdate = true;
+      if (old) old.dispose();
+    },
+    update(t) {
+      flames.forEach(({ f, gl }, i) => {
+        const k = 1 + Math.sin(t * 9 + i * 1.7) * 0.12 + Math.sin(t * 23 + i) * 0.06;
+        f.scale.set(1, 1.7 * k, 1);
+        gl.material.opacity = 0.5 * k;
+      });
+      ch.g.rotation.y = Math.sin(t * 0.3) * 0.05;
+      piano.notes.forEach((n, i) => {
+        const k = ((t * 0.35 + i / 3) % 1);
+        n.position.set(0.3 - k * 0.5, 1.2 + k * 0.9, 0.6 + Math.sin(k * 6 + i) * 0.15);
+        n.scale.setScalar(Math.sin(k * Math.PI));
+      });
+    },
+    catHead: () => null,
   };
 }
 

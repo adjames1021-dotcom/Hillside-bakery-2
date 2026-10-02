@@ -486,6 +486,22 @@ kbd {
 .overlay .note { margin: 12px 0 0; font-size: 13px; opacity: .7; }
 #pause { cursor: pointer; }
 #title { background: radial-gradient(closest-side, rgba(249, 226, 200, 0), rgba(249, 226, 200, .35)); }
+/* venue picker on the title card */
+.venues { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 0 0 14px; }
+.venue {
+  display: flex; align-items: center; gap: 10px; text-align: left; padding: 9px 12px 10px; cursor: pointer;
+  font: 500 14px/1.2 var(--font); color: var(--ink); background: #fff; border: 3px solid var(--ink); border-radius: 16px; box-shadow: 0 3px 0 var(--ink);
+}
+.venue b { display: block; font-size: 15.5px; }
+.venue small { display: block; font-size: 12px; opacity: .75; margin-top: 2px; }
+.venue[aria-checked="true"] { background: var(--butter); }
+.venue:hover { background: #FFFBF2; }
+.venue[aria-checked="true"]:hover { background: var(--butter); }
+.venue:active { transform: translateY(2px); box-shadow: 0 1px 0 var(--ink); }
+.vico { flex: none; width: 34px; height: 34px; border-radius: 50%; border: 2.5px solid var(--ink); }
+.vico-bakery { background: radial-gradient(circle at 50% 62%, #F4A646 0 34%, transparent 35%), linear-gradient(#AFCB9C 0 55%, #F7B9C4 55%); }
+.vico-restaurant { background: radial-gradient(circle at 50% 70%, #FFE08A 0 22%, transparent 23%), linear-gradient(#8E7AB6 0 40%, #F6A57A 40% 62%, #5A9CC0 62%); }
+@media (max-width: 520px) { .venues { grid-template-columns: 1fr; } }
 @media (min-aspect-ratio: 5/4) {
   #title { place-items: center start; padding-left: max(24px, 5vw); }
 }
@@ -680,9 +696,19 @@ body[data-mode="focus"] #carry { display: none; }
 
   <div class="overlay" id="title">
     <div class="card-big">
-      <p class="eyebrow">A first-person baking game</p>
-      <h1>Hillside <span>Bakery</span></h1>
-      <p class="lede">Take orders from your animal regulars, gather ingredients from Dry and Cold Storage, and bake 50 desserts step by step.</p>
+      <p class="eyebrow" id="titleEyebrow">A first-person baking game</p>
+      <h1 id="titleName">Hillside <span>Bakery</span></h1>
+      <p class="lede" id="titleLede">Take orders from your animal regulars, gather ingredients from Dry and Cold Storage, and bake 50 desserts step by step.</p>
+      <div class="venues" role="radiogroup" aria-label="Where do you want to work today?">
+        <button class="venue" type="button" role="radio" data-venue="bakery" aria-checked="true">
+          <span class="vico vico-bakery" aria-hidden="true"></span>
+          <span><b>Hillside Bakery</b><small id="venueBakery">Cozy hillside bakery · 50 desserts</small></span>
+        </button>
+        <button class="venue" type="button" role="radio" data-venue="restaurant" aria-checked="false">
+          <span class="vico vico-restaurant" aria-hidden="true"></span>
+          <span><b>Lantern Cliff</b><small id="venueRestaurant">Seaside restaurant · waiters · 21 dishes</small></span>
+        </button>
+      </div>
       <ul class="keys">
         <li>Mouse: look</li>
         <li><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> walk</li>

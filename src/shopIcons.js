@@ -1,5 +1,6 @@
 // Flat sticker icons for the morning market's upgrades and decor.
 import { INK, TAU, dk, E, Ci, R, P, ts, cloud, tube, line, drawSticker } from './sticker.js';
+import { IS_RESTAURANT } from './venue.js';
 
 const PAINT = {
   oven(c) {
@@ -152,10 +153,83 @@ const PAINT = {
   },
 };
 
+// the restaurant's upgrades and decor (its cushions/tip jar/shelves replace the bakery's art)
+const B_PAINT = { cushions: PAINT.cushions, tipjar: PAINT.tipjar, shelves: PAINT.shelves };
+Object.assign(PAINT, {
+  waiter(c) {
+    ts(c, Ci(50, 34, 16), '#F4A646');
+    for (const sx of [-1, 1]) ts(c, P([[50 + sx * 10, 22], [50 + sx * 16, 10], [50 + sx * 4, 20]]), '#F4A646', { off: 1, lw: 2 });
+    ts(c, P([[30, 88], [70, 88], [64, 52], [36, 52]]), '#3E5C76');
+    ts(c, P([[44, 52], [56, 52], [50, 70]]), '#FFFBF0', { off: 1, lw: 2 });
+    for (const sx of [-1, 1]) ts(c, E(50 + sx * 7, 54, 6, 3.5), '#C8384A', { off: 1, lw: 1.8 });
+    ts(c, E(78, 50, 16, 4), '#C9D4D9', { off: 1.5 });
+    ts(c, Ci(78, 44, 6), '#E4483E', { off: 1, lw: 1.8 });
+  },
+  runners(c) {
+    for (const [x, y] of [[30, 50], [62, 50]]) {
+      ts(c, P([[x - 14, y + 16], [x + 16, y + 16], [x + 14, y + 6], [x, y], [x - 12, y + 4]]), '#3E5C76');
+      ts(c, R(x - 15, y + 15, 32, 6, 3), '#FFFBF0', { off: 1, lw: 2 });
+    }
+    for (const y of [36, 46, 56]) line(c, [[10, y], [22, y]], 3, '#86BADB');
+  },
+  cushions(c) {
+    ts(c, R(22, 22, 56, 40, 12), '#B9384A');
+    for (const x of [36, 50, 64]) ts(c, Ci(x, 42, 2.6), '#D9A441', { flat: true, lw: 1 });
+    ts(c, R(18, 58, 64, 16, 8), '#C8485A');
+    for (const x of [26, 70]) ts(c, R(x - 3, 72, 6, 16, 3), '#6E4A32', { lw: 2.2 });
+  },
+  tipjar(c) {
+    ts(c, Ci(50, 30, 14), '#FFFBF0');
+    ts(c, P([[30, 88], [70, 88], [66, 46], [34, 46]]), '#2E3A48');
+    ts(c, P([[44, 46], [56, 46], [50, 62]]), '#FFFBF0', { off: 1, lw: 2 });
+    ts(c, E(50, 48, 6, 3), '#2E3A48', { off: 1, lw: 1.6 });
+    ts(c, Ci(78, 70, 9), '#FFC940', { lw: 2 });
+    ts(c, Ci(84, 58, 7), '#FFC940', { lw: 2 });
+  },
+  shelves(c) {
+    ts(c, R(16, 14, 68, 74, 6), '#3E5C76');
+    ts(c, R(22, 20, 56, 62, 4), '#E9E2D2', { off: 1 });
+    for (const y of [40, 60]) ts(c, R(22, y, 56, 4, 2), '#6E4A32', { off: 0.5, lw: 1.6 });
+    for (const [x, y, col] of [[30, 30, '#E4483E'], [46, 30, '#F4D58A'], [62, 30, '#B9B23A'], [32, 50, '#FFE066'], [50, 50, '#D9A05B'], [66, 50, '#6E9F4E'], [38, 72, '#C9965A'], [58, 72, '#F6EEDC']]) ts(c, Ci(x, y, 6), col, { off: 1, lw: 1.8 });
+  },
+  candles(c) {
+    for (const [x, h] of [[38, 40], [60, 30]]) {
+      ts(c, R(x - 6, 80 - h, 12, h, 3), '#FFF6E4');
+      ts(c, E(x, 78 - h - 6, 4, 8), '#FFC940', { off: 1, lw: 1.8 });
+    }
+    ts(c, E(50, 84, 30, 6), '#D9A441');
+  },
+  roses(c) {
+    ts(c, P([[38, 88], [62, 88], [58, 58], [42, 58]]), '#AFD6EC', { gloss: [46, 70, 3] });
+    for (const [x, y] of [[40, 38], [58, 34], [50, 48]]) {
+      ts(c, Ci(x, y, 10), '#D8405A');
+      tube(c, [[x - 4, y], [x, y - 4], [x + 4, y]], '#B9284A', 2, { lw: 1 });
+    }
+    for (const [x, y, r] of [[34, 52, -0.6], [66, 50, 0.6]]) { c.save(); c.translate(x, y); c.rotate(r); ts(c, E(0, 0, 8, 4), '#6E9F4E', { lw: 1.8 }); c.restore(); }
+  },
+  piano(c) {
+    ts(c, P([[14, 46], [70, 30], [88, 44], [86, 62], [14, 62]]), '#2E2A30');
+    ts(c, R(14, 58, 72, 10, 3), '#FFFBF0', { off: 1 });
+    for (let i = 0; i < 9; i++) line(c, [[20 + i * 7.5, 58], [20 + i * 7.5, 68]], 1.4);
+    for (const x of [22, 80]) ts(c, R(x - 3, 66, 6, 20, 3), '#2E2A30', { lw: 2 });
+    tube(c, [[60, 22], [66, 14], [72, 20]], '#D9A441', 3, { lw: 1.4 });
+  },
+  chandelier(c) {
+    line(c, [[50, 6], [50, 26]], 2.5);
+    ts(c, E(50, 30, 24, 7), '#D9A441');
+    for (const x of [30, 42, 58, 70]) {
+      ts(c, R(x - 3, 32, 6, 14, 2), '#FFF6E4', { off: 0.5, lw: 1.6 });
+      ts(c, E(x, 30, 3, 5), '#FFC940', { off: 0.5, lw: 1.4 });
+    }
+    for (const x of [34, 50, 66]) ts(c, P([[x, 48], [x + 5, 58], [x, 70], [x - 5, 58]]), '#E6F6FA', { off: 1, lw: 1.8 });
+  },
+});
+
 const cache = new Map();
+const R_ONLY = { cushions: true, tipjar: true, shelves: true };
 export function shopIconURL(id) {
   if (!cache.has(id)) {
-    const p = PAINT[id];
+    const p = IS_RESTAURANT || !R_ONLY[id] ? PAINT[id] : B_PAINT[id];
     cache.set(id, p ? drawSticker(96, p, 3).toDataURL() : '');
   }
   return cache.get(id);

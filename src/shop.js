@@ -3,21 +3,24 @@
 import { INGREDIENTS, ingredientURL } from './ingredients.js';
 import { CATEGORIES, dessertURL } from './desserts.js';
 import { shopIconURL } from './shopIcons.js';
+import { IS_RESTAURANT, WORDS } from './venue.js';
+import { R_PRICE_TIER, R_UPGRADES, R_DECOR } from './rest_data.js';
 
 const $ = (s) => document.querySelector(s);
 
 // price per unit: pantry staples are cheap, fancy things cost more
-const PRICE_TIER = {
+const B_PRICE_TIER = {
   1: ['flour', 'sugar', 'butter', 'milk', 'eggs', 'oats', 'cinnamon'],
   3: ['chocolate', 'nuts', 'caramel', 'peanut-butter', 'coconut', 'pineapple', 'pumpkin', 'sweet-potato', 'ice-cream'],
 };
+const PRICE_TIER = IS_RESTAURANT ? R_PRICE_TIER : B_PRICE_TIER;
 export function unitPrice(id) {
   if (PRICE_TIER[1].includes(id)) return 1;
   if (PRICE_TIER[3].includes(id)) return 3;
   return 2;
 }
 
-export const UPGRADES = [
+const B_UPGRADES = [
   { id: 'oven', name: 'Speedy Oven', desc: 'Everything bakes 30% faster.', price: 180 },
   { id: 'thermo', name: 'Oven Thermometer', desc: 'Treats stay golden twice as long.', price: 140 },
   { id: 'mixer', name: 'Stand Mixer', desc: 'Mixing, whisking and kneading go 50% faster.', price: 160 },
@@ -29,13 +32,16 @@ export const UPGRADES = [
   { id: 'shelves', name: 'Bigger Shelves', desc: 'Keep up to 14 of every ingredient.', price: 220 },
 ];
 
-export const DECOR = [
+const B_DECOR = [
   { id: 'sunflowers', name: 'Sunflower Planters', desc: 'Big sunny pots by the door. Customers wait 5% longer.', price: 90, patience: 0.05 },
   { id: 'lanterns', name: 'Paper Lanterns', desc: 'Glowing lanterns over the café. +5% coins.', price: 120, coins: 0.05 },
   { id: 'ferns', name: 'Hanging Ferns', desc: 'Leafy baskets from the beams. Customers wait 5% longer.', price: 100, patience: 0.05 },
   { id: 'chalkboard', name: 'Specials Board', desc: "An easel showing today's special. Specials earn double instead of +50%.", price: 140 },
   { id: 'catbed', name: 'Shop Cat', desc: 'A sleepy tabby naps in a basket. Everyone loves it: +8% coins.', price: 250, coins: 0.08 },
 ];
+
+export const UPGRADES = IS_RESTAURANT ? R_UPGRADES : B_UPGRADES;
+export const DECOR = IS_RESTAURANT ? R_DECOR : B_DECOR;
 
 export const baseCap = (S) => (S.upgrades.includes('shelves') ? 14 : 8);
 
@@ -117,16 +123,16 @@ export class Shop {
     $('#sumDay').textContent = `Day ${S.day} done!`;
     $('#sumLede').textContent = r.served
       ? pickLine(r)
-      : 'A quiet day in the hills. Tomorrow will be busier!';
+      : IS_RESTAURANT ? 'A quiet evening on the cliff. Tomorrow will be busier!' : 'A quiet day in the hills. Tomorrow will be busier!';
     $('#sumStats').innerHTML = [
-      ['Treats served', r.served],
+      [WORDS.treats, r.served],
       ['Coins earned', r.coins],
       ['Tips', r.tips],
       ['Average stars', avg],
       ['Went home hungry', r.left],
     ].map(([k, v]) => `<li><span>${k}</span><b>${v}</b></li>`).join('');
     const best = r.best ? `<p class="sum-best"><img src="${dessertURL(r.best)}" alt="">Crowd favourite: <b>${r.best.name}</b></p>` : '';
-    $('#sumExtra').innerHTML = best + (next ? `<p class="sum-next">Tomorrow the <b>${next.name}</b> recipes join the menu!</p>` : '');
+    $('#sumExtra').innerHTML = best + (next ? `<p class="sum-next">Tomorrow <b>${next.name}</b> join${IS_RESTAURANT ? '' : 's'} the menu!</p>` : '');
     this.summary.hidden = false;
   }
 
@@ -136,7 +142,7 @@ export class Shop {
     this.summary.hidden = true;
     this.market.hidden = false;
     $('#marketDay').textContent = `Morning Market · Day ${this.S.day}`;
-    $('#openDay').textContent = `Open the shop for Day ${this.S.day}`;
+    $('#openDay').textContent = `Open the ${WORDS.shop} for Day ${this.S.day}`;
     this.render();
   }
 
@@ -189,6 +195,11 @@ export class Shop {
 
 function pickLine(r) {
   const avg = r.stars / r.served;
+  if (IS_RESTAURANT) {
+    if (r.left === 0 && avg >= 2.8) return 'Every table left glowing. The critics will be writing about Lantern Cliff!';
+    if (avg >= 2.5) return 'A lovely service. The dining room hummed all evening.';
+    return 'A busy service! A few plates came out rough, but the sunset made up for it.';
+  }
   if (r.left === 0 && avg >= 2.8) return 'Every customer went home happy. The whole hillside is talking about you!';
   if (avg >= 2.5) return 'What a lovely day of baking. Your regulars are smiling.';
   return 'A busy day! A few treats came out toasty, but everyone had fun.';

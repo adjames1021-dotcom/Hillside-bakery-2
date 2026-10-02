@@ -24,6 +24,15 @@ function setLayer(obj, layer) { obj.traverse((o) => o.layers.set(layer)); return
 
 // ------------------------------------------------------------------ stations
 
+// Colors of the kitchen stations: the bakery's pastels by default; the
+// restaurant swaps in navy, marble, copper and steel before building.
+const K = {
+  counterTop: C.cream2, mixCounter: C.sage, mixerShell: '#F4A6B6', cookCounter: C.blue, rangeTop: '#5A3E32', pot: C.pumpkin,
+  ovenShell: C.apricot, ovenDoor: C.pumpkin, freezer: C.blue, freezerDeep: C.blueDeep, decorCounter: C.pink,
+  cold: C.blue, coldDeep: C.blueDeep, islandBody: C.blue, islandDeep: C.blueDeep, islandTop: () => toon('#fff', { map: planksTex(true) }), board: C.honeyLight,
+};
+export function stationStyle(k) { Object.assign(K, k); }
+
 const v2 = (pts) => pts.map(([x, y]) => new THREE.Vector2(x, y));
 // a tool that rests somewhere and gets animated while you work
 const tool = (parent, obj, x, y, z, rx = 0, ry = 0, rz = 0) => {
@@ -36,9 +45,9 @@ const tool = (parent, obj, x, y, z, rx = 0, ry = 0, rz = 0) => {
 
 /** A pastel stand mixer on a counter. The bowl shows the batter coming together while you mix. */
 function buildMixer() {
-  const g = counter(1.5, 0.9, 0.91, C.sage);
+  const g = counter(1.5, 0.9, 0.91, K.mixCounter, K.counterTop);
   const H = 0.91;
-  const shell = '#F4A6B6';
+  const shell = K.mixerShell;
   const stand = dyn(put(g, new THREE.Group(), 0.0, H, 0.04));
   put(stand, mk(G.box(0.62, 0.07, 0.4, 0.035), shell), 0, 0.035, 0.0);
   put(stand, mk(G.box(0.58, 0.012, 0.36, 0.006), C.cream2, { outline: false }), 0, 0.071, 0.0);
@@ -107,9 +116,9 @@ function buildMixer() {
 
 /** A range top with an open pot (you can see what's cooking) and a frying pan of oil. */
 function buildStove() {
-  const g = counter(1.5, 0.9, 0.91, C.blue);
+  const g = counter(1.5, 0.9, 0.91, K.cookCounter, K.counterTop);
   const H = 0.91;
-  put(g, mk(G.box(1.22, 0.05, 0.76, 0.025), '#5A3E32', { outline: 'thin' }), 0, H + 0.005, 0);
+  put(g, mk(G.box(1.22, 0.05, 0.76, 0.025), K.rangeTop, { outline: 'thin' }), 0, H + 0.005, 0);
   const top = H + 0.03;
   for (const [x, z] of [[-0.3, 0.12], [0.3, 0.12], [-0.3, -0.22], [0.3, -0.22]]) {
     const ring = put(g, mk(G.torus(0.12, 0.016, Math.PI * 2, 40), '#2E221C', { outline: false }), x, top + 0.004, z);
@@ -123,9 +132,9 @@ function buildStove() {
   }
   // the pot, open so you can watch it simmer
   const pot = dyn(put(g, new THREE.Group(), -0.3, top + 0.008, 0.12));
-  put(pot, mk(G.lathe(v2([[0.0005, 0], [0.19, 0], [0.207, 0.014], [0.214, 0.122], [0.226, 0.134], [0.22, 0.144], [0.198, 0.132], [0.195, 0.02], [0.0005, 0.02]]), 48), C.pumpkin, { outline: 'mid' }));
+  put(pot, mk(G.lathe(v2([[0.0005, 0], [0.19, 0], [0.207, 0.014], [0.214, 0.122], [0.226, 0.134], [0.22, 0.144], [0.198, 0.132], [0.195, 0.02], [0.0005, 0.02]]), 48), K.pot, { outline: 'mid' }));
   for (const sx of [-1, 1]) {
-    const h = put(pot, mk(G.capsule(0.022, 0.07), C.pumpkin, { outline: 'thin' }), sx * 0.25, 0.1, 0);
+    const h = put(pot, mk(G.capsule(0.022, 0.07), K.pot, { outline: 'thin' }), sx * 0.25, 0.1, 0);
     h.rotation.z = Math.PI / 2;
   }
   const soupMat = toon('#F3C07A', { unique: true });
@@ -175,7 +184,7 @@ function buildOven() {
   const W = 1.5, H = 1.34, D = 0.95;
   for (const [x, z] of [[-0.6, -0.36], [0.6, -0.36], [-0.6, 0.36], [0.6, 0.36]]) put(g, mk(G.cyl(0.07, 0.09, 0.1, 0.03, 12), C.honeyDark, { outline: 'mid' }), x, 0.05, z);
   const body = dyn(put(g, new THREE.Group()));
-  const shell = C.apricot;
+  const shell = K.ovenShell;
   put(body, mk(G.box(W, 0.28, D, 0.08), shell), 0, 0.24, 0);
   put(body, mk(G.box(W, 0.36, D, 0.1), shell), 0, H - 0.18, 0);
   for (const sx of [-1, 1]) put(body, mk(G.box(0.18, 0.66, D, 0.05), shell), sx * (W / 2 - 0.09), 0.69, 0);
@@ -209,9 +218,9 @@ function buildOven() {
   // bottom-hinged glass door
   const door = dyn(put(body, new THREE.Group(), 0, 0.38, D / 2 + 0.02));
   const DW = W - 0.3, DH = 0.64;
-  put(door, mk(G.box(DW, 0.1, 0.07, 0.03), C.pumpkin), 0, 0.05, 0);
-  put(door, mk(G.box(DW, 0.1, 0.07, 0.03), C.pumpkin), 0, DH - 0.05, 0);
-  for (const sx of [-1, 1]) put(door, mk(G.box(0.1, DH, 0.07, 0.03), C.pumpkin), sx * (DW / 2 - 0.05), DH / 2, 0);
+  put(door, mk(G.box(DW, 0.1, 0.07, 0.03), K.ovenDoor), 0, 0.05, 0);
+  put(door, mk(G.box(DW, 0.1, 0.07, 0.03), K.ovenDoor), 0, DH - 0.05, 0);
+  for (const sx of [-1, 1]) put(door, mk(G.box(0.1, DH, 0.07, 0.03), K.ovenDoor), sx * (DW / 2 - 0.05), DH / 2, 0);
   const glass = new THREE.Mesh(G.plane(DW - 0.2, DH - 0.2), toon('#FFE2B0', { transparent: true, opacity: 0.22 }));
   put(door, glass, 0, DH / 2, 0.005);
   const shine = put(door, mk(G.box(0.025, 0.2, 0.006, 0.003), '#FFFFFF', { outline: false, cast: false }), -DW / 2 + 0.2, DH / 2 + 0.06, 0.012);
@@ -235,9 +244,9 @@ function buildFreezer() {
   const g = new THREE.Group();
   const body = dyn(put(g, new THREE.Group()));
   const W = 1.3, D = 0.8, Hh = 0.86, t = 0.07;
-  put(body, mk(G.box(W, 0.14, D, 0.06), C.blue), 0, 0.09, 0);
-  for (const sz of [-1, 1]) put(body, mk(G.box(W, Hh - 0.15, t, 0.03), C.blue), 0, (Hh + 0.15) / 2, sz * (D / 2 - t / 2));
-  for (const sx of [-1, 1]) put(body, mk(G.box(t, Hh - 0.15, D - 2 * t, 0.03), C.blue), sx * (W / 2 - t / 2), (Hh + 0.15) / 2, 0);
+  put(body, mk(G.box(W, 0.14, D, 0.06), K.freezer), 0, 0.09, 0);
+  for (const sz of [-1, 1]) put(body, mk(G.box(W, Hh - 0.15, t, 0.03), K.freezer), 0, (Hh + 0.15) / 2, sz * (D / 2 - t / 2));
+  for (const sx of [-1, 1]) put(body, mk(G.box(t, Hh - 0.15, D - 2 * t, 0.03), K.freezer), sx * (W / 2 - t / 2), (Hh + 0.15) / 2, 0);
   put(body, mk(G.box(W - 2 * t, 0.02, D - 2 * t, 0.008), '#EAF6FA', { outline: false }), 0, 0.17, 0);
   for (const [x, z, s] of [[-0.45, -0.25, 1], [0.48, 0.22, 0.8], [0.4, -0.26, 0.7], [-0.47, 0.24, 0.9]]) {
     const f = put(body, mk(G.sphere(0.05 * s, 12, 8), '#FFFFFF', { outline: 'thin' }), x, 0.18, z);
@@ -253,14 +262,14 @@ function buildFreezer() {
   const post = dyn(put(body, mk(G.cyl(0.035, 0.035, 1, 0.004), '#C7E3EC', { outline: 'thin', cast: false }), 0, 0.181, 0.02));
   post.scale.y = 0.001;
   // front: a vent grille and a snowflake badge
-  for (let i = 0; i < 4; i++) put(body, mk(G.box(0.5, 0.016, 0.01, 0.006), C.blueDeep, { outline: false }), 0, 0.2 + i * 0.035, D / 2 + 0.003);
+  for (let i = 0; i < 4; i++) put(body, mk(G.box(0.5, 0.016, 0.01, 0.006), K.freezerDeep, { outline: false }), 0, 0.2 + i * 0.035, D / 2 + 0.003);
   const badge = put(body, mk(G.cyl(0.07, 0.07, 0.02, 0.008), '#FFFBF0', { outline: 'thin' }), 0, 0.52, D / 2 + 0.008);
   badge.rotation.x = Math.PI / 2;
-  for (let i = 0; i < 3; i++) put(body, mk(G.box(0.09, 0.012, 0.006, 0.004), C.blueDeep, { outline: false }), 0, 0.52, D / 2 + 0.02).rotation.z = (i / 3) * Math.PI;
-  for (const x of [-0.5, 0.5]) for (const z of [-0.3, 0.3]) put(body, mk(G.cyl(0.05, 0.06, 0.03, 0.01), C.blueDeep, { outline: 'thin' }), x, 0.015, z);
+  for (let i = 0; i < 3; i++) put(body, mk(G.box(0.09, 0.012, 0.006, 0.004), K.freezerDeep, { outline: false }), 0, 0.52, D / 2 + 0.02).rotation.z = (i / 3) * Math.PI;
+  for (const x of [-0.5, 0.5]) for (const z of [-0.3, 0.3]) put(body, mk(G.cyl(0.05, 0.06, 0.03, 0.01), K.freezerDeep, { outline: 'thin' }), x, 0.015, z);
   // the lid, hinged along the back
   const lid = dyn(put(body, new THREE.Group(), 0, Hh, -D / 2));
-  put(lid, mk(G.box(W + 0.03, 0.09, D + 0.03, 0.04), C.blue), 0, 0.045, D / 2);
+  put(lid, mk(G.box(W + 0.03, 0.09, D + 0.03, 0.04), K.freezer), 0, 0.045, D / 2);
   const lh = put(lid, mk(G.capsule(0.022, 0.3), C.cream2, { outline: 'thin' }), 0, 0.03, D + 0.035);
   lh.rotation.z = Math.PI / 2;
   for (const [x, z, s] of [[-0.38, 0.28, 1], [0.32, 0.52, 0.75], [0.0, 0.16, 0.6]]) {
@@ -276,7 +285,7 @@ function buildFreezer() {
 
 /** The decorating table: a turntable cake stand and the topping tools that pipe, shake and drizzle. */
 function buildDecor() {
-  const g = counter(1.6, 0.9, 0.91, C.pink);
+  const g = counter(1.6, 0.9, 0.91, K.decorCounter, K.counterTop);
   const H = 0.91;
   const turn = dyn(put(g, new THREE.Group(), 0, H, 0.08));
   put(turn, mk(G.cyl(0.14, 0.15, 0.03, 0.012), C.cream2, { outline: 'mid' }), 0, 0.015, 0);
@@ -349,18 +358,18 @@ function buildScrap() {
 function buildIsland() {
   const g = new THREE.Group();
   const H = 0.92;
-  put(g, mk(G.box(0.9, 0.8, 2.1, 0.1), C.blue), 0, 0.42, 0);
-  put(g, mk(G.box(0.86, 0.08, 2.06, 0.03), C.blueDeep, { outline: false }), 0, 0.04, 0);
+  put(g, mk(G.box(0.9, 0.8, 2.1, 0.1), K.islandBody), 0, 0.42, 0);
+  put(g, mk(G.box(0.86, 0.08, 2.06, 0.03), K.islandDeep, { outline: false }), 0, 0.04, 0);
   for (const sx of [-1, 1]) {
     for (const z of [-0.62, 0, 0.62]) {
-      put(g, mk(G.box(0.04, 0.56, 0.52, 0.03), C.blue, { outline: 'thin', cast: false }), sx * 0.46, 0.44, z);
+      put(g, mk(G.box(0.04, 0.56, 0.52, 0.03), K.islandBody, { outline: 'thin', cast: false }), sx * 0.46, 0.44, z);
       put(g, mk(G.sphere(0.035, 10, 8), C.butter, { outline: 'thin' }), sx * 0.49, 0.56, z + 0.16);
     }
   }
-  const topMesh = put(g, mk(G.box(1.1, 0.1, 2.32, 0.04), toon('#fff', { map: planksTex(true) })), 0, H - 0.05, 0);
+  const topMesh = put(g, mk(G.box(1.1, 0.1, 2.32, 0.04), K.islandTop()), 0, H - 0.05, 0);
   // the cutting board (the prep station) and its tools
   const board = put(g, new THREE.Group(), 0, H, 0.5);
-  put(board, mk(G.box(0.7, 0.035, 0.48, 0.016), C.honeyLight, { outline: 'mid' }), 0, 0.0175, 0);
+  put(board, mk(G.box(0.7, 0.035, 0.48, 0.016), K.board, { outline: 'mid' }), 0, 0.0175, 0);
   put(board, mk(G.box(0.62, 0.003, 0.4, 0.002), '#EDC992', { outline: false }), 0, 0.036, 0);
   const hole = put(board, mk(G.cyl(0.025, 0.025, 0.037, 0.008), '#C9965A', { outline: false }), -0.3, 0.0175, 0.0);
   hole.scale.set(1.6, 1, 1);
@@ -386,7 +395,7 @@ function buildIsland() {
   put(fork, mk(G.box(0.02, 0.012, 0.09, 0.005), C.pinkDeep, { outline: 'thin' }), 0, 0.002, -0.04);
   tools.fork = tool(props, fork, 0, 0.3, 0);
   const tamper = new THREE.Group();
-  put(tamper, mk(G.cyl(0.05, 0.055, 0.07, 0.02), C.blue, { outline: 'mid' }), 0, 0.035, 0);
+  put(tamper, mk(G.cyl(0.05, 0.055, 0.07, 0.02), K.islandBody, { outline: 'mid' }), 0, 0.035, 0);
   put(tamper, mk(G.cyl(0.015, 0.015, 0.12, 0.006), C.honeyDark, { outline: 'thin' }), 0, 0.12, 0);
   tools.tamper = tool(props, tamper, 0, 0.3, 0);
   tools.spoon = tool(props, woodSpoon(), 0, 0.3, 0);
@@ -442,21 +451,21 @@ const DRY_ROWS = [
   { y: 0.115, ids: ['flour', 'sugar', 'oats', 'bread', null] },
 ];
 
-function buildDryShelf(items) {
+function buildDryShelf(items, rows = DRY_ROWS, frame = { side: C.honey, back: C.sage, cubby: C.honeyLight, crown: [C.sage, C.cream2], sign: C.honeyDark }) {
   const g = new THREE.Group();
   const W = 2.8, H = 2.2, D = 0.5;
-  put(g, mk(G.box(W, H, 0.06, 0.03), C.sage), 0, H / 2, -D / 2 + 0.03);
-  for (const sx of [-1, 1]) put(g, mk(G.box(0.08, H, D, 0.03), C.honey), sx * (W / 2 - 0.04), H / 2, 0);
-  for (const y of [0.08, 0.78, 1.48, H - 0.04]) put(g, mk(G.box(W, 0.07, D, 0.025), C.honey), 0, y, 0);
+  put(g, mk(G.box(W, H, 0.06, 0.03), frame.back), 0, H / 2, -D / 2 + 0.03);
+  for (const sx of [-1, 1]) put(g, mk(G.box(0.08, H, D, 0.03), frame.side), sx * (W / 2 - 0.04), H / 2, 0);
+  for (const y of [0.08, 0.78, 1.48, H - 0.04]) put(g, mk(G.box(W, 0.07, D, 0.025), frame.side), 0, y, 0);
   for (const base of [0.08, 0.78, 1.48]) {
-    for (let k = 1; k < 5; k++) put(g, mk(G.box(0.045, 0.63, D - 0.06, 0.015), C.honeyLight, { outline: 'thin' }), -W / 2 + (W / 5) * k, base + 0.35, -0.02);
+    for (let k = 1; k < 5; k++) put(g, mk(G.box(0.045, 0.63, D - 0.06, 0.015), frame.cubby, { outline: 'thin' }), -W / 2 + (W / 5) * k, base + 0.35, -0.02);
   }
   // the scalloped crown sits on the front edge so it never hangs inside the cubbies
-  const crown = scallopAwning(W + 0.1, [C.sage, C.cream2], 0.26);
+  const crown = scallopAwning(W + 0.1, frame.crown, 0.26);
   put(g, crown, 0, H + 0.03, D / 2 - 0.02);
-  put(g, mk(G.box(1.3, 0.32, 0.05, 0.03), C.honeyDark, { outline: 'mid' }), 0, H + 0.4, -D / 2 + 0.1);
+  put(g, mk(G.box(1.3, 0.32, 0.05, 0.03), frame.sign, { outline: 'mid' }), 0, H + 0.4, -D / 2 + 0.1);
   put(g, label('sign-dry', 1.18), 0, H + 0.4, -D / 2 + 0.1 + 0.027);
-  DRY_ROWS.forEach((row) => {
+  rows.forEach((row) => {
     row.ids.forEach((id, i) => {
       const x = -W / 2 + (W / 5) * (i + 0.5);
       if (!id) {
@@ -504,22 +513,23 @@ const COLD_ROWS = [
   { y: 0.3, ids: ['strawberries', 'blueberries', 'cherries', 'limes'] },
 ];
 
-function buildColdStorage(items) {
+function buildColdStorage(items, rows = COLD_ROWS) {
   const g = new THREE.Group();
   const W = 2.2, H = 2.15, D = 0.72;
-  put(g, mk(G.box(W, 0.14, D, 0.05), C.blueDeep), 0, 0.07, 0);
-  for (const sx of [-1, 1]) put(g, mk(G.box(0.1, H, D, 0.04), C.blue), sx * (W / 2 - 0.05), H / 2, 0);
-  put(g, mk(G.box(W, H, 0.08, 0.03), C.blue), 0, H / 2, -D / 2 + 0.04);
+  put(g, mk(G.box(W, 0.14, D, 0.05), K.coldDeep), 0, 0.07, 0);
+  for (const sx of [-1, 1]) put(g, mk(G.box(0.1, H, D, 0.04), K.cold), sx * (W / 2 - 0.05), H / 2, 0);
+  put(g, mk(G.box(W, H, 0.08, 0.03), K.cold), 0, H / 2, -D / 2 + 0.04);
   put(g, mk(G.box(W - 0.2, H - 0.3, 0.02, 0.01), toon('#F6F4EA', { emissive: '#FFF6DA', emissiveIntensity: 0.25 }), { outline: false }), 0, 0.14 + (H - 0.3) / 2, -D / 2 + 0.09);
-  const header = put(g, mk(G.box(W, 0.38, D + 0.04, 0.08), C.blue), 0, H + 0.17, 0.02);
+  const header = put(g, mk(G.box(W, 0.38, D + 0.04, 0.08), K.cold), 0, H + 0.17, 0.02);
   const face = null;
-  put(g, mk(G.box(1.32, 0.32, 0.05, 0.03), C.blueDeep, { outline: 'mid' }), 0, H + 0.58, 0);
+  put(g, mk(G.box(1.32, 0.32, 0.05, 0.03), K.coldDeep, { outline: 'mid' }), 0, H + 0.58, 0);
   put(g, label('sign-cold', 1.2), 0, H + 0.58, 0.03);
   const xs = [-0.75, -0.25, 0.25, 0.75];
-  COLD_ROWS.forEach((row) => {
+  rows.forEach((row) => {
     put(g, mk(G.box(W - 0.2, 0.04, D - 0.12, 0.015), '#FFFBF0', { outline: 'thin' }), 0, row.y - 0.02, -0.02);
-    put(g, mk(G.box(W - 0.2, 0.06, 0.03, 0.012), C.blueDeep, { outline: false }), 0, row.y - 0.03, D / 2 - 0.08);
+    put(g, mk(G.box(W - 0.2, 0.06, 0.03, 0.012), K.coldDeep, { outline: false }), 0, row.y - 0.03, D / 2 - 0.08);
     row.ids.forEach((id, i) => {
+      if (!id) return;
       const m = put(g, ingredientModel(id), xs[i], row.y, -0.05);
       items.push({ id, obj: m, zone: 'cold', door: xs[i] < 0 ? -1 : 1 });
       put(g, label(id, 0.36), xs[i], row.y - 0.035, D / 2 - 0.06);
@@ -530,9 +540,9 @@ function buildColdStorage(items) {
   for (const s of [-1, 1]) {
     const pivot = dyn(put(g, new THREE.Group(), s * (W / 2 - 0.1), 0.14, D / 2 - 0.02));
     const dw = W / 2 - 0.1, dh = H - 0.2;
-    put(pivot, mk(G.box(0.06, dh, 0.05, 0.02), C.blueDeep, { outline: 'thin' }), -s * 0.03, dh / 2, 0);
-    put(pivot, mk(G.box(0.06, dh, 0.05, 0.02), C.blueDeep, { outline: 'thin' }), -s * (dw - 0.03), dh / 2, 0);
-    for (const y of [0.03, dh - 0.03]) put(pivot, mk(G.box(dw, 0.06, 0.05, 0.02), C.blueDeep, { outline: 'thin' }), -s * dw / 2, y, 0);
+    put(pivot, mk(G.box(0.06, dh, 0.05, 0.02), K.coldDeep, { outline: 'thin' }), -s * 0.03, dh / 2, 0);
+    put(pivot, mk(G.box(0.06, dh, 0.05, 0.02), K.coldDeep, { outline: 'thin' }), -s * (dw - 0.03), dh / 2, 0);
+    for (const y of [0.03, dh - 0.03]) put(pivot, mk(G.box(dw, 0.06, 0.05, 0.02), K.coldDeep, { outline: 'thin' }), -s * dw / 2, y, 0);
     const glass = new THREE.Mesh(G.plane(dw - 0.08, dh - 0.08), toon('#DDF0F6', { transparent: true, opacity: 0.2 }));
     put(pivot, glass, -s * dw / 2, dh / 2, 0);
     // a soft sheen across the glass instead of solid sticks
@@ -555,7 +565,9 @@ function buildColdStorage(items) {
 
 // ------------------------------------------------------------------ walls
 
-function wallPiece(w, h, t, x, y, z, mat, plane, tile) {
+export { buildMixer, buildStove, buildOven, buildFreezer, buildDecor, buildScrap, buildIsland, buildDryShelf, buildColdStorage, put, dyn, setLayer, V3 };
+
+export function wallPiece(w, h, t, x, y, z, mat, plane, tile) {
   const m = mk(G.box(w, h, t, 0.06), mat, { cast: false });
   m.position.set(x, y, z);
   worldUV(m, plane, tile);
