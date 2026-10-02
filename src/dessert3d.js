@@ -1665,6 +1665,22 @@ function buildDessert(d, state) {
     }
     for (const ch of fg.children) ch.userData.s0 = ch.scale.toArray();
   }
+  if (state.split) {
+    // the plate (or bowl, tin, ramekin) apart from the food, so guests can eat the food and leave the plate
+    master.updateMatrixWorld(true);
+    const dish = new THREE.Group();
+    dish.name = 'dish';
+    const food = new THREE.Group();
+    food.name = 'food';
+    const bases = [];
+    master.traverse((o) => { if (o.isMesh && o.userData.base) bases.push(o); });
+    for (const o of bases) dish.attach(o);
+    for (const ch of [...master.children]) food.attach(ch);
+    master.add(dish, food);
+    mergeStatic(dish);
+    mergeStatic(food);
+    return master;
+  }
   mergeStatic(master);
   return master;
 }
@@ -1681,7 +1697,7 @@ const defaultTops = (d) => d.steps.filter((s) => s.t === 'decor').flatMap((s) =>
 export function dessertModel(d, state = {}) {
   const tops = state.tops ? [...state.tops] : state.bare ? [] : defaultTops(d);
   const hide = state.hide ? [...state.hide].sort() : [];
-  const key = [d.id, state.raw ? 1 : 0, state.burnt || 0, tops.join('+'), hide.join('+'), state.live || '', state.noPlate ? 1 : 0].join('|');
+  const key = [d.id, state.raw ? 1 : 0, state.burnt || 0, tops.join('+'), hide.join('+'), state.live || '', state.noPlate ? 1 : 0, state.split ? 1 : 0].join('|');
   let master = modelCache.get(key);
   if (!master) {
     master = buildDessert(d, { ...state, tops, hide });
@@ -1689,6 +1705,22 @@ export function dessertModel(d, state = {}) {
     if (modelCache.size > 400) modelCache.delete(modelCache.keys().next().value);
   }
   return master.clone();
+}
+
+/**
+ * A served plate being eaten: k = 1 full, 0 finished. With a split model only
+ * the food shrinks (into the middle of the plate); otherwise the whole thing does.
+ */
+export function eatTo(obj, k, base = 1) {
+  const food = obj.getObjectByName('food');
+  if (!food) {
+    obj.scale.setScalar(Math.max(0.2, base * k));
+    return;
+  }
+  obj.scale.setScalar(base);
+  const f = Math.max(0.02, k);
+  food.scale.set(f, f, f);
+  food.visible = k > 0.03;
 }
 
 /** The live (animatable) feature group inside a model built with state.live, if any. */

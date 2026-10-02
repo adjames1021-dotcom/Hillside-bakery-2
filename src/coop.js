@@ -60,6 +60,28 @@ export function createCoop(G) {
   avatar.bob.add(hands);
   const tag = ui.bubble(`name ${look.cls}`, '');
   tag.textContent = mate.name;
+  // what the other chef just said in chat, over their head
+  const said = ui.bubble('say chat', '');
+  let saidT = 0;
+  net.on('chat', (m) => {
+    if (m.mine) return;
+    said.textContent = m.text;
+    saidT = Math.max(3, Math.min(8, m.text.length * 0.12));
+  });
+  let hideHeldT = 0;
+  /** A thrown item is still in the air: keep their paws empty a moment. */
+  mate.hideHeld = (t) => { hideHeldT = t; };
+  /** Where the other chef's paws are, in the world. */
+  mate.handsAt = () => avatar.root.localToWorld(V3(0, 0.62, 0.32));
+  const mateBox = new THREE.Box3();
+  /** The other chef as something to aim at (null when they're not around). */
+  C.mateTarget = () => {
+    if (!avatar.root.visible) return null;
+    const p = avatar.root.position;
+    mateBox.min.set(p.x - 0.4, 0, p.z - 0.4);
+    mateBox.max.set(p.x + 0.4, 1.5, p.z + 0.4);
+    return mateBox;
+  };
 
   /** Put something in the other chef's paws (null to clear). */
   mate.hold = (obj) => {
@@ -176,7 +198,7 @@ export function createCoop(G) {
         rep: { served: R.served, coins: R.coins, tips: R.tips, stars: R.stars, left: R.left, penalty: R.penalty || 0 },
       },
       td: defs, tk: S.tickets.map((t) => [t.id, t.num, t.customer.id || 0]), it, st, cu, wa,
-      me: [r2(G.P.x), r2(G.P.z), r2(G.yaw()), G.moving() ? 1 : 0],
+      me: [r2(G.P.x), r2(G.P.z), r2(G.yaw()), G.moving() ? 1 : 0, S.activeId || 0],
       ev: C.events.splice(0),
     };
   }
@@ -224,7 +246,7 @@ export function createCoop(G) {
     for (const d of m.td) defs.set(d.id, d);
     // our own actions not handled yet: keep what we see until the host catches up
     if (m.ack >= C.seq) applySnap(m);
-    if (m.me) mateMoved({ x: m.me[0], z: m.me[1], yaw: m.me[2], mv: m.me[3] });
+    if (m.me) mateMoved({ x: m.me[0], z: m.me[1], yaw: m.me[2], mv: m.me[3], a: m.me[4] });
     for (const e of m.ev) guestEvent(e);
   }
 
@@ -238,6 +260,7 @@ export function createCoop(G) {
     } else if (e.t === 'bump') ui.bump(e.id);
     else if (e.t === 'focus') G.enterFocus(stById[e.st]);
     else if (e.t === 'phase') G.onPhase(e);
+    else if (e.t === 'throw') G.onThrow(e);
     else if (e.t === 'banner') G.banner(e.text, e.sub);
   }
 
@@ -452,7 +475,7 @@ export function createCoop(G) {
         c.t += dt;
         c.a.headG.rotation.x = Math.sin(c.t * 9) * 0.1;
         const bites = Math.floor(c.t / 1.3);
-        for (const p of c.plates) p.scale.setScalar(Math.max(0.2, (c.plates.length > 1 ? 0.85 : 1) - bites * 0.28));
+        for (const p of c.plates) G.eatTo(p, 1 - bites * 0.3, c.orders.length > 1 ? 0.85 : 1);
       } else c.a.headG.rotation.x = 0;
       if (c.hop > 0) {
         c.hop = Math.max(0, c.hop - dt * 2.5);
@@ -488,7 +511,17 @@ export function createCoop(G) {
   }
 
   // ------------------------------------------------------------ both sides
+  /** Guest: an item by its id (the kitchen as the host last sent it). */
+  C.itemById = (id) => items.get(id) || null;
+  /** What the other chef is carrying. */
+  C.mateCarry = () => {
+    if (host) return mate.carry;
+    for (const it of items.values()) if (it.holder === 'host' && it.where === 'hands') return it;
+    return null;
+  };
+
   function mateMoved(m) {
+    if (m.a !== undefined) mate.activeId = m.a || null;
     mate.goal.set(m.x, 0, m.z);
     mate.yaw = m.yaw;
     mate.moving = !!m.mv;
@@ -504,7 +537,7 @@ export function createCoop(G) {
       posT -= dt;
       if (posT <= 0) {
         posT = POS_EVERY;
-        net.send({ t: 'pos', x: r2(G.P.x), z: r2(G.P.z), yaw: r2(G.yaw()), mv: G.moving() ? 1 : 0 });
+        net.send({ t: 'pos', x: r2(G.P.x), z: r2(G.P.z), yaw: r2(G.yaw()), mv: G.moving() ? 1 : 0, a: S.activeId || 0 });
       }
     }
     if (host && mate.here) {
@@ -531,6 +564,11 @@ export function createCoop(G) {
       tag.hidden = false;
       ui.project(tag, V3(r.position.x, 1.75, r.position.z), G.cam, 16);
     } else tag.hidden = true;
+    hideHeldT = Math.max(0, hideHeldT - dt);
+    hands.visible = hideHeldT <= 0;
+    saidT = Math.max(0, saidT - dt);
+    said.hidden = !(show && saidT > 0);
+    if (!said.hidden) ui.project(said, V3(r.position.x, 2.05, r.position.z), G.cam, 20);
     for (let i = pings.length - 1; i >= 0; i--) {
       const p = pings[i];
       p.t += dt;

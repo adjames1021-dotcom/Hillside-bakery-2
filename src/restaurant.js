@@ -185,6 +185,9 @@ function fancyChair(col) {
   return g;
 }
 
+// where a guest's plate goes, from the middle of the table
+const PLATE_Z = 0.41;
+
 function diningTable() {
   const g = new THREE.Group();
   // a white tablecloth falling in soft folds to the floor
@@ -207,12 +210,36 @@ function diningTable() {
   put(g, mk(G.cyl(0.012, 0.012, 0.12, 0.004, 8), BRASS, { outline: false }), 0, 0.72, 0);
   const shade = put(g, mk(G.cyl(0.035, 0.06, 0.07, 0.01, 16), '#FFF3DC', { outline: 'thin', emissive: '#FFD9A0', emissiveIntensity: 0.6 }), 0, 0.8, 0);
   shade.userData.noHighlight = true;
-  // salt, pepper and folded napkins at each place
+  // salt and pepper by the lamp
   for (const [x, col] of [[0.07, '#FFFFFF'], [-0.07, '#4B3A30']]) put(g, mk(G.capsule(0.014, 0.03), col, { outline: 'thin' }), x, 0.67, 0.08);
+  // a place setting for each guest: gold-rimmed charger, fork on the left,
+  // knife on the right, a folded napkin and a wine glass (sz: which side of the table)
+  const glassMat = toon('#E6F4FA', { transparent: true, opacity: 0.38 });
   for (const sz of [-1, 1]) {
-    const nap = put(g, mk(G.box(0.1, 0.03, 0.08, 0.012), '#F7B9C4', { outline: 'thin' }), 0.25, 0.65, sz * 0.38);
-    nap.rotation.y = 0.2 * sz;
-    for (const sx of [-1, 1]) put(g, mk(G.box(0.012, 0.004, 0.13, 0.002), '#DCE6EA', { outline: 'thin' }), sx * 0.22 + (sx < 0 ? 0 : 0.0), 0.638, sz * 0.4);
+    const z = sz * PLATE_Z;
+    // the guest faces the middle of the table, so their right hand is +x on the +z side
+    const right = sz;
+    put(g, mk(G.cyl(0.19, 0.19, 0.006, 0.003, 40), '#FFFDF8', { outline: 'thin', cast: false }), 0, 0.637, z);
+    put(g, mk(G.torus(0.184, 0.006, Math.PI * 2, 48), BRASS, { outline: false, cast: false }), 0, 0.64, z).rotation.x = Math.PI / 2;
+    // fork: handle, neck and four tines
+    const fork = put(g, new THREE.Group(), -right * 0.245, 0.636, z);
+    put(fork, mk(G.box(0.014, 0.005, 0.12, 0.002), '#DCE6EA', { outline: 'thin', cast: false }), 0, 0.0025, sz * 0.03);
+    put(fork, mk(G.box(0.026, 0.004, 0.03, 0.002), '#DCE6EA', { outline: 'thin', cast: false }), 0, 0.0025, -sz * 0.045);
+    for (let t = 0; t < 4; t++) put(fork, mk(G.box(0.004, 0.004, 0.035, 0.0015), '#DCE6EA', { outline: false, cast: false }), -0.0105 + t * 0.007, 0.0025, -sz * 0.075);
+    // knife: handle and a rounded blade, edge toward the plate
+    const knife = put(g, new THREE.Group(), right * 0.245, 0.636, z);
+    put(knife, mk(G.box(0.015, 0.006, 0.09, 0.003), '#DCE6EA', { outline: 'thin', cast: false }), 0, 0.003, sz * 0.04);
+    put(knife, mk(G.box(0.02, 0.003, 0.11, 0.003), '#F2F6F8', { outline: 'thin', cast: false }), 0, 0.0025, -sz * 0.055);
+    // napkin folded into a long pleated rectangle beside the fork
+    const nap = put(g, new THREE.Group(), -right * 0.345, 0.636, z + sz * 0.01);
+    put(nap, mk(G.box(0.07, 0.022, 0.15, 0.008), '#FFFDF8', { outline: 'thin', cast: false }), 0, 0.011, 0);
+    put(nap, mk(G.box(0.072, 0.006, 0.02, 0.003), NAVY, { outline: false, cast: false }), 0, 0.019, 0);
+    // a wine glass just above the knife
+    const wg = put(g, new THREE.Group(), right * 0.21, 0.636, z - sz * 0.2);
+    put(wg, mk(G.cyl(0.032, 0.034, 0.004, 0.002, 18), glassMat, { outline: 'thin', cast: false }), 0, 0.002, 0);
+    put(wg, mk(G.cyl(0.005, 0.006, 0.08, 0.002, 8), glassMat, { outline: false, cast: false }), 0, 0.044, 0);
+    put(wg, mk(G.lathe([new THREE.Vector2(0.0005, 0.084), new THREE.Vector2(0.026, 0.094), new THREE.Vector2(0.038, 0.13), new THREE.Vector2(0.033, 0.17), new THREE.Vector2(0.031, 0.172)], 20), glassMat, { outline: 'thin', cast: false }));
+    put(wg, mk(G.cyl(0.028, 0.03, 0.03, 0.006, 18), '#8E2E3E', { outline: false, cast: false }), 0, 0.105, 0);
   }
   g.add(blob(1.7, 1.7));
   return g;
@@ -304,29 +331,37 @@ export function buildRestaurant(scene) {
   put(world, mk(G.box(12.7, 0.55, 10.7, 0.22), '#E9D3B0'), 0, -0.36, 0);
   // a tall sea cliff: bands of sandstone stepping down to the water, with
   // ledges, boulders and tufts of grass on the way down
-  const SEA_Y = -6.6;
+  const SEA_Y = -10;
   const cliffCols = ['#D9A47A', '#C98A62', '#E2B086', '#B97A56'];
-  const strata = [[-1.25, 1.3, 12.9, 10.9, 0, 0], [-2.55, 1.35, 12.6, 10.6, 0.1, -0.05], [-3.85, 1.3, 12.75, 10.75, -0.08, 0.06], [-5.15, 1.35, 12.45, 10.45, 0.12, 0.02], [-6.35, 1.2, 12.85, 10.85, -0.05, -0.04]];
+  // sandstone bands from just under the floor down to the water, each a little in or out
+  const strata = [];
+  for (let y = -0.6, i = 0; y > SEA_Y - 0.4; i++) {
+    const h = 1.25 + (i % 3) * 0.1;
+    const inset = [0, 0.3, 0.15, 0.4, 0.05, 0.25][i % 6];
+    strata.push([y - h / 2, h, 12.9 - inset, 10.9 - inset, ((i * 37) % 5 - 2) * 0.05, ((i * 53) % 5 - 2) * 0.04]);
+    y -= h;
+  }
   strata.forEach(([y, h, w, d, ox, oz], i) => put(world, mk(G.box(w, h, d, 0.3), cliffCols[i % 4], { cast: false }), ox, y, oz));
   const cliffK = (rx, rz, pad = 0) => 1 / Math.max(Math.abs(rx) / (6.35 + pad), Math.abs(rz) / (5.35 + pad));
-  for (let i = 0; i < 64; i++) {
-    const a = (i / 64) * Math.PI * 2 + (i % 2) * 0.05;
+  for (let i = 0; i < 96; i++) {
+    const a = (i / 96) * Math.PI * 2 + (i % 2) * 0.05;
     const rx = Math.cos(a), rz = Math.sin(a);
     const k = cliffK(rx, rz);
-    const y = -1.0 - ((i * 7) % 9) * 0.62;
+    const y = -1.0 - ((i * 7) % 13) * ((-SEA_Y - 1.6) / 12);
     const rock = put(world, mk(lumpyRock(0.42 + (i % 3) * 0.17, i), cliffCols[(i * 3) % 4], { outline: 'mid', cast: false }), rx * k, y, rz * k);
     rock.scale.set(1.5, 0.7 + (i % 4) * 0.14, 1.2);
     rock.rotation.y = -a;
   }
-  for (const [y, inset] of [[-1.85, 0], [-3.2, 0.25], [-4.5, 0.1], [-5.8, 0.3]]) {
+  const LEDGES = [-1.85, -3.2, -4.5, -5.8, -7.1, -8.4, -9.4];
+  for (const [y, inset] of LEDGES.map((y, i) => [y, [0, 0.25, 0.1, 0.3, 0.05, 0.2, 0.35][i]])) {
     const ledge = put(world, mk(G.box(13.0 - inset, 0.12, 11.0 - inset, 0.05), '#B97A56', { outline: 'thin', cast: false }), 0.05, y, 0);
     ledge.userData.noHighlight = true;
   }
   // grass tufts clinging to the ledges
-  for (let i = 0; i < 26; i++) {
-    const a = (i / 26) * Math.PI * 2 + 0.2;
+  for (let i = 0; i < 40; i++) {
+    const a = (i / 40) * Math.PI * 2 + 0.2;
     const k = cliffK(Math.cos(a), Math.sin(a), 0.05);
-    const tuft = put(world, mk(G.sphere(0.22, 10, 6), i % 3 ? '#8AAF6A' : '#6E9A5A', { outline: 'thin', cast: false }), Math.cos(a) * k, [-1.78, -3.13, -4.43, -5.73][i % 4], Math.sin(a) * k);
+    const tuft = put(world, mk(G.sphere(0.22, 10, 6), i % 3 ? '#8AAF6A' : '#6E9A5A', { outline: 'thin', cast: false }), Math.cos(a) * k, LEDGES[i % LEDGES.length] + 0.07, Math.sin(a) * k);
     tuft.scale.set(1.4, 0.5, 1);
   }
   // a little wooden jetty at the foot of the cliff, with a rowboat tied up
@@ -352,7 +387,7 @@ export function buildRestaurant(scene) {
   const boats = [];
   const boatD = dyn(put(world, sailboat(), -9.0, SEA_Y + 0.05, 9.5));
   boatD.scale.setScalar(0.55);
-  boats.push({ obj: boatD, cx: 0, cz: 0, rx: 13.6, rz: 12.6, speed: 0.04, phase: 2.2, y: SEA_Y + 0.05 });
+  boats.push({ obj: boatD, cx: 0, cz: 0, rx: 13.6, rz: 12.6, speed: 0.02, phase: 2.2, y: SEA_Y + 0.05 });
 
   // --- floors: checkered tiles in the kitchen, walnut planks in the dining room
   const kFloor = put(world, mk(G.box(6.0, 0.14, 10, 0.05), toon('#fff', { map: checkerTex() }), { outline: 'mid', cast: false }), -3.0, -0.07, 0);
@@ -439,7 +474,8 @@ export function buildRestaurant(scene) {
   const lh = lighthouse();
   put(fp, lh.group, 24, SEA_Y, 30);
   glows.push(lh.glow);
-  for (const [r, speed, phase, s] of [[27, 0.022, 0.7, 0.8], [36, -0.016, 0.2, 1], [44, 0.012, 1.3, 0.7], [31, -0.02, 3.6, 0.85]]) {
+  // far out on the water they drift by slowly (about a quarter of a metre a second)
+  for (const [r, speed, phase, s] of [[27, 0.009, 0.7, 0.8], [36, -0.007, 0.2, 1], [44, 0.0055, 1.3, 0.7], [31, -0.008, 3.6, 0.85], [52, 0.0045, 5.0, 0.9]]) {
     const b = dyn(put(fp, sailboat(s > 0.9 ? '#FFFBF0' : '#FFE9A8'), 0, SEA_Y + 0.05, 0));
     b.scale.setScalar(s);
     boats.push({ obj: b, cx: 0, cz: 0, rx: r, rz: r * 0.9, speed, phase, y: SEA_Y + 0.05 });
@@ -589,7 +625,7 @@ export function buildRestaurant(scene) {
       colliders.push({ type: 'circle', x, z, r: 0.3 });
       seats.push({
         x, z, ry, table: ti, chair: ch, occupant: null,
-        plateSpot: V3(x, 0.64, z - s * 0.48),
+        plateSpot: V3(x, 0.643, t.z + s * PLATE_Z),
         aisle: V3(AISLE_X, 0, z),
         stand: V3(x + (x < AISLE_X ? 0.62 : -0.62), 0, z),
       });
@@ -745,7 +781,7 @@ export function buildRestaurant(scene) {
     nav: { aisleX: AISLE_X, laneX: LANE_X, crossZ: CROSS_Z },
     signPos: V3(DOOR_X, 1.3, -4.82),
     bg: '#F3CDBE',
-    title: { zoom: 1.28, drop: 2.6, dropTall: 5.5 },
+    title: { zoom: 1.5, drop: 4.4, dropTall: 5.5 },
     // sail the boats around the cliff and let them bob on the swell
     update(dt, time) {
       for (const b of boats) {

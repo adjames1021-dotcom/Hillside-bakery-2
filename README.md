@@ -27,6 +27,8 @@ python3 -m http.server 8000
 | Pick a layer | 1–9 | Tap the layer |
 | Step back from a station | Q | **Step back** |
 | Ping a spot for your co-op partner | G | |
+| Throw what you're holding to your partner | T, or look at them and press E | **Throw** button |
+| Chat (co-op) | Enter, type, Enter | **Chat** button |
 
 ## A day at the bakery
 
@@ -39,7 +41,7 @@ New menu sections join on later days: Pies and Cookies on day 1, Pastries on day
 
 ## Lantern Cliff, the restaurant
 
-An open kitchen on a cliff above the sea at sunset, with a lighthouse, sailboats and lanterns outside the glass walls. Guests come in through the door, a waiter (Pierre or Lulu, plus Basil if you hire him) takes their order at the table and walks the ticket back to **the pass**. You cook from the Pantry and the Cold Room, then set the finished plate on the pass and a waiter carries it out. The menu has 21 dishes: Starters & Soups and Pasta & Risotto on day 1, From the Sea on day 2, From the Grill on day 3, Desserts on day 4, and Chef's Signatures on day 5. It has its own market: a Stone Hearth Oven, Probe Thermometer, Pro Blender, Japanese Knife Set, Copper Cookware, Turbo Chiller, Third Waiter, Quick Runners, Velvet Chairs, a Maître d' (tips) and a Walk-in Pantry, plus table candles, roses, a grand piano, a chef's menu board and a crystal chandelier. Each kitchen keeps its own save.
+An open kitchen high on a sea cliff at sunset, with a lighthouse, slowly drifting sailboats, a jetty far below and lanterns outside the glass walls. The kitchen is a pro one: a stainless prep counter with a white poly board and hotel pans of mise en place, and a plating pass under heat lamps where tweezers, a pepper mill, a microplane, a sifter and squeeze bottles do the garnishing. Dishes are plated on navy-banded fine-dining plates and served onto place settings with a gold charger, cutlery, a napkin and a wine glass; guests eat the food and leave the plate. Guests come in through the door, a waiter (Pierre or Lulu, plus Basil if you hire him) takes their order at the table and walks the ticket back to **the pass**. You cook from the Pantry and the Cold Room, then set the finished plate on the pass and a waiter carries it out. The menu has 21 dishes: Starters & Soups and Pasta & Risotto on day 1, From the Sea on day 2, From the Grill on day 3, Desserts on day 4, and Chef's Signatures on day 5. It has its own market: a Stone Hearth Oven, Probe Thermometer, Pro Blender, Japanese Knife Set, Copper Cookware, Turbo Chiller, Third Waiter, Quick Runners, Velvet Chairs, a Maître d' (tips) and a Walk-in Pantry, plus table candles, roses, a grand piano, a chef's menu board and a crystal chandelier. Each kitchen keeps its own save.
 
 ## Co-op with a friend
 
@@ -55,6 +57,9 @@ Then **Start the day together**. The day works like a busy service:
 - It starts calm and gets busier through the day. Three **rush waves** (lunch, afternoon and a final rush; sunset and dinner at Lantern Cliff) come with a big banner, a burst of guests, shorter patience and more two-dish orders. The **rush meter** on the right, under the top bar, shows Calm, Busy, Rush! or Frantic!.
 - Serve guests in a row to build a team **streak** (up to ×1.4 coins). A guest who gives up and leaves breaks the streak and costs the team coins.
 - Only one chef can work a station's close-up at a time. Your partner is a fox with a name tag, and you can see what they're carrying. Press **G** to ping the spot you're looking at.
+- **Throw** what you're holding (a bowl of ingredients, a finished plate) to your partner: look at them and press E, or press T from up to 8 m away. It arcs through the air into their paws, as long as their paws are empty and they aren't busy at a station.
+- **Chat** in the lobby, and in the kitchen with Enter (or the Chat button). Messages show in the corner and in a bubble over the other chef.
+- **Tickets:** your selected ticket and your partner's both show their full recipe, with your partner's name on theirs, and the ▸ button keeps any other ticket open too. Tickets say whose paws an order is in.
 - The kitchen keeps running when either chef pauses. The day summary adds a team rating (1–3 stars).
 - The host runs the morning market and keeps the progress (coins, day, upgrades) in their save.
 

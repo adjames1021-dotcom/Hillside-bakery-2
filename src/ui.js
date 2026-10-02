@@ -157,15 +157,16 @@ export class UI {
 
   // ---------------------------------------------------------------- tickets
 
-  ticketHTML(tk, active) {
+  ticketHTML(tk, active, o = {}) {
     const d = tk.d;
     const item = tk.item;
     const stepIdx = item ? item.step : 0;
     const got = item ? item.got : new Set();
     const raw = item ? item.raw : new Set();
-    const where = !item ? 'not started' : item.where === 'hands' ? 'in your paws' : item.where === 'waiter' ? 'on its way to the table' : !item.station ? 'waiting' : item.station.type === 'spot' ? 'resting on the counter' : item.station.type === 'pass' ? 'on the pass' : `at the ${item.station.name}`;
+    const open = active || !!o.open;
+    const where = !item ? 'not started' : item.where === 'hands' ? (o.paws ? o.paws(item) : 'in your paws') : item.where === 'waiter' ? 'on its way to the table' : !item.station ? 'waiting' : item.station.type === 'spot' ? 'resting on the counter' : item.station.type === 'pass' ? 'on the pass' : `at the ${item.station.name}`;
     let body;
-    if (active) {
+    if (open) {
       const steps = tk.steps.map((s, i) => {
         const cls = i < stepIdx ? 'done' : i === stepIdx ? 'now' : '';
         let icons = '';
@@ -191,19 +192,24 @@ export class UI {
     }
     const q = item && item.stars < 3 ? `<span class="tq" title="Quality">${stars(item.stars)}</span>` : '';
     const tags = [tk.variant ? `<span class="vtag ${tk.variant.kind}">${tk.variant.label}</span>` : '', tk.combo ? `<span class="vtag combo">${tk.combo}</span>` : '', tk.special ? '<span class="vtag special">Special</span>' : ''].join('');
-    return `<article class="ticket ${active ? 'active' : ''}" data-id="${tk.id}" id="ticket-${tk.id}">
-      <header><span class="tnum">${tk.num}</span><img class="tst" src="${dessertURL(d)}" alt=""><span class="tname"><b>${d.name}</b><small>for ${tk.customer.name} · ${where}</small></span>${q}</header>
+    // co-op: whose ticket it is, and a toggle to keep more recipes open
+    const owner = o.owner ? `<span class="towner ${o.ownerCls || ''}">${o.owner}</span>` : '';
+    const toggle = o.toggle && !active ? `<button class="ttog" type="button" data-tog="${tk.id}" aria-label="${open ? 'Close' : 'Open'} this recipe" aria-expanded="${open}">${open ? '▾' : '▸'}</button>` : '';
+    return `<article class="ticket ${active ? 'active' : ''} ${open ? 'open' : ''}" data-id="${tk.id}" id="ticket-${tk.id}">
+      <header><span class="tnum">${tk.num}</span><img class="tst" src="${dessertURL(d)}" alt=""><span class="tname"><b>${d.name}</b><small>for ${tk.customer.name} · ${where}</small></span>${q}${owner}${toggle}</header>
       ${tags ? `<div class="vtags">${tags}</div>` : ''}
       <div class="tbar"><i></i></div>${body}</article>`;
   }
 
-  renderTickets(tickets, activeId) {
-    const key = tickets.map((t) => `${t.id}:${t.item ? `${t.item.step}|${[...t.item.got].join(',')}|${[...t.item.raw].join(',')}|${t.item.where}|${t.item.station?.id}|${t.item.stars}` : '-'}`).join(';') + '#' + activeId;
+  /** co: optional co-op view { open: Set of ticket ids, owner(tk) → name, paws(item) → text } */
+  renderTickets(tickets, activeId, co = null) {
+    const opt = (t) => (co ? { open: co.open.has(t.id), owner: co.owner(t), ownerCls: co.ownerCls, paws: co.paws, toggle: true } : {});
+    const key = tickets.map((t) => `${t.id}:${t.item ? `${t.item.step}|${[...t.item.got].join(',')}|${[...t.item.raw].join(',')}|${t.item.where}|${t.item.station?.id}|${t.item.stars}|${co ? co.paws(t.item) : ''}` : '-'}|${co ? `${co.open.has(t.id)}${co.owner(t)}` : ''}`).join(';') + '#' + activeId;
     if (key === this.lastTicketsKey) return;
     this.lastTicketsKey = key;
     const sorted = [...tickets].sort((a, b) => a.num - b.num);
     this.ticketsEl.innerHTML = sorted.length
-      ? sorted.map((t) => this.ticketHTML(t, t.id === activeId)).join('')
+      ? sorted.map((t) => this.ticketHTML(t, t.id === activeId, opt(t))).join('')
       : '<p class="notickets">No orders yet. Customers with a <b>!</b> are ready to order.</p>';
     this.ticketBars.clear();
     for (const t of tickets) {

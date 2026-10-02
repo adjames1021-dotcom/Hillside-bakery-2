@@ -93,6 +93,7 @@ function connect() {
       net.partnerHere = false;
       return net.emit('peerLeft');
     }
+    if (m.t === 'chat') return addChat(m.name || net.partnerName, m.text, false);
     net.emit('msg', m);
   };
   ws.onclose = (e) => {
@@ -175,6 +176,40 @@ function renderRoom() {
   else if (!els.status.classList.contains('bad')) status(l.players.length < 2 ? 'Share the room code or the invite link.' : '');
 }
 
+// ------------------------------------------------------------------ chat
+
+/** Everything said in the room this session (lobby and kitchen). */
+net.chat = [];
+let lastChat = 0;
+function addChat(name, text, mine) {
+  const clean = String(text || '').replace(/\s+/g, ' ').trim().slice(0, 140);
+  if (!clean) return;
+  const msg = { name: String(name || 'Chef').slice(0, 16), text: clean, mine, at: Date.now() };
+  net.chat.push(msg);
+  if (net.chat.length > 40) net.chat.shift();
+  renderLobbyChat();
+  net.emit('chat', msg);
+}
+/** Say something to the other chef. */
+net.say = (text) => {
+  const now = Date.now();
+  if (now - lastChat < 350 || !net.ws) return false;
+  lastChat = now;
+  const clean = String(text || '').replace(/\s+/g, ' ').trim().slice(0, 140);
+  if (!clean) return false;
+  net.send({ t: 'chat', name: net.name, text: clean });
+  addChat(net.name, clean, true);
+  return true;
+};
+/** One chat line as safe HTML. */
+export const chatLine = (m) => `<p class="cl ${m.mine ? 'mine' : ''}"><b>${esc(m.name)}</b> ${esc(m.text)}</p>`;
+
+function renderLobbyChat() {
+  if (!els || !els.chatLog) return;
+  els.chatLog.innerHTML = net.chat.slice(-30).map(chatLine).join('') || '<p class="cl empty">Say hi to your partner!</p>';
+  els.chatLog.scrollTop = els.chatLog.scrollHeight;
+}
+
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
 async function enterRoom(code) {
@@ -209,7 +244,7 @@ export function setupLobby({ onOpen, onClose }) {
     box: $('#lobby'), join: $('#lobbyJoin'), roomBox: $('#lobbyRoom'), name: $('#lobbyName'), code: $('#roomCode'),
     codeIn: $('#lobbyCode'), server: $('#lobbyServer'), serverBox: $('#lobbyServerBox'), chefs: $('#lobbyChefs'),
     maps: $('#lobbyMaps'), diff: $('#lobbyDiff'), diffName: $('#diffName'), diffDesc: $('#diffDesc'), start: $('#lobbyStart'),
-    status: $('#lobbyStatus'), back: $('#lobbyBack'),
+    status: $('#lobbyStatus'), back: $('#lobbyBack'), chatLog: $('#lobbyChatLog'), chatForm: $('#lobbyChatForm'), chatIn: $('#lobbyChatIn'),
   };
   const store = loadStore();
   net.cid = store.cid || randomId();
@@ -217,6 +252,11 @@ export function setupLobby({ onOpen, onClose }) {
   els.name.value = store.name || '';
   els.server.value = store.server || hashParams().server || '';
   els.diffDesc.textContent = DIFFICULTY[3].desc;
+  renderLobbyChat();
+  els.chatForm.addEventListener('submit', (e) => {
+    e.preventDefault();
+    if (net.say(els.chatIn.value)) els.chatIn.value = '';
+  });
 
   const open = () => {
     els.box.hidden = false;

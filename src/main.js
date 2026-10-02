@@ -10,14 +10,14 @@ import { ING_BY_ID, prepModel } from './ingredients.js';
 import { createGame, MODE_HINT, TAP_LABEL } from './minigames.js';
 import { Shop, UPGRADES, DECOR, freshStock } from './shop.js';
 import { buildDecorPieces, buildOpenSign } from './decor.js';
-import { dessertModel, bowlModel, liveFeature, featureProgress, featureTick, bitPile, bitColor } from './dessert3d.js';
+import { dessertModel, bowlModel, liveFeature, featureProgress, featureTick, bitPile, bitColor, eatTo } from './dessert3d.js';
 import { buildHighlight } from './merge.js';
 import { ViewModel } from './viewmodel.js';
 import { Input } from './input.js';
 import { UI, stepWhere, stars } from './ui.js';
 import { FX } from './fx.js';
 import { sfx as sfxRaw, unlockAudio, isMuted, setMuted } from './audio.js';
-import { net, setupLobby, leaveRoom, DIFFICULTY } from './net.js';
+import { net, setupLobby, leaveRoom, DIFFICULTY, chatLine } from './net.js';
 import { createCoop } from './coop.js';
 
 const $ = (s) => document.querySelector(s);
@@ -601,7 +601,7 @@ async function start(hotData = {}) {
   /** A served plate on the table in front of the customer. */
   function tablePlate(c, spec, i, n) {
     const [did, burnt] = spec;
-    const plate = dessertModel(BY_ID[did], { burnt });
+    const plate = dessertModel(BY_ID[did], { burnt, split: true });
     plate.userData.spec = spec;
     const toTable = V3(W.tables[c.seat.table].x - c.seat.x, 0, W.tables[c.seat.table].z - c.seat.z).normalize();
     const side = V3(-toTable.z, 0, toTable.x).multiplyScalar(i ? 0.2 : n > 1 || c.orders.length > 1 ? -0.2 : 0);
@@ -820,7 +820,7 @@ async function start(hotData = {}) {
         const bites = Math.floor(c.t / 1.3);
         if (bites > c.bites && c.plates.length) {
           c.bites = bites;
-          for (const p of c.plates) p.scale.setScalar(Math.max(0.2, (c.plates.length > 1 ? 0.85 : 1) - bites * 0.28));
+          for (const p of c.plates) eatTo(p, 1 - bites * 0.3, c.orders.length > 1 ? 0.85 : 1);
           fx.puff(c.seat.plateSpot.clone().setY(0.75), 3, 0.25);
         }
         if (c.t > 1 && Math.random() < dt * 1.2) fx.hearts(r.position.clone().setY(1.7), 1);
@@ -1323,6 +1323,15 @@ async function start(hotData = {}) {
       const sc = aimScore(custBox, t);
       if (sc < bestS) { bestS = sc; best = { kind: 'customer', c, hl: c.hl }; }
     }
+    // co-op: aim at the other chef to throw them what you're holding
+    const mb = coop && S.carry ? coop.mateTarget() : null;
+    if (mb) {
+      const t = rayBox(mb);
+      if (t !== Infinity) {
+        const sc = aimScore(mb, t);
+        if (sc < bestS) { bestS = sc; best = { kind: 'mate', box: mb }; }
+      }
+    }
     return best;
   }
 
@@ -1338,6 +1347,7 @@ async function start(hotData = {}) {
       const n = S.stock[t.id] ?? 0;
       return n ? `Grab ${ING_BY_ID[t.id].name} (${n} left)` : `Out of ${ING_BY_ID[t.id].name}!`;
     }
+    if (t.kind === 'mate') return it ? `Throw the ${it.d.name} to ${mateName()}` : mateName();
     if (t.kind === 'sign') return S.phase === 'morning' ? 'Flip the sign to Open' : S.phase === 'open' ? 'Open until 5 PM' : 'Closed for the day';
     if (t.kind === 'customer') {
       const c = t.c;
@@ -1391,6 +1401,7 @@ async function start(hotData = {}) {
     vm.grab();
     if (!t) return;
     // the guest asks the host's kitchen to do it
+    if (t.kind === 'mate') return throwToMate();
     if (isGuest()) return coop.act({ t: 'act', ...(t.kind === 'customer' ? { c: t.c.id } : { i: W.interact.indexOf(t) }), active: S.activeId });
     if (t.kind === 'ingredient') return grabIngredient(t);
     if (t.kind === 'customer') return talkTo(t.c);
@@ -1420,6 +1431,7 @@ async function start(hotData = {}) {
 
   function guestAct(m) {
     if (!['play', 'focus', 'book', 'pause'].includes(S.mode)) return;
+    if (m.throw) return hostThrow(true);
     const t = m.c ? S.customers.find((c) => c.id === m.c) : W.interact[m.i];
     if (!t) return;
     withPartner(m.active, () => {
@@ -1464,6 +1476,80 @@ async function start(hotData = {}) {
   }
 
   const mateName = () => (coop ? coop.mate.name : 'Someone');
+
+  // ---------------------------------------------------------------- co-op: throwing to the other chef
+  const THROW_RANGE = 8;
+  let heldHideT = 0;
+  /** A copy of what an item looks like right now, for flying through the air. */
+  function itemCopy(it) {
+    const look = itemLook(it);
+    const m = look.kind === 'bowl' ? bowlModel(look.bits, look.batter, it.d) : dessertModel(it.d, look);
+    const box = new THREE.Box3().setFromObject(m);
+    const size = box.getSize(V3());
+    m.scale.setScalar(0.3 / Math.max(size.x, size.y, size.z, 0.001));
+    return m;
+  }
+  const myHands = () => V3(P.x - Math.sin(yaw) * 0.35, 0.95, P.z - Math.cos(yaw) * 0.35);
+  /** The arc a thrown item takes, on whichever screen this is. */
+  function throwFlight(it, from, to) {
+    if (!it) return;
+    const m = itemCopy(it);
+    m.position.copy(from);
+    scene.add(m);
+    fly(m, to, 0.5, 0.55, null, true);
+    sfx.whoosh();
+  }
+
+  /** Throw what you're holding to the other chef (the host decides if it lands). */
+  function throwToMate() {
+    if (!coop || !coop.mate.here) return;
+    if (!S.carry) return nope('Your paws are empty.');
+    vm.grab();
+    if (isGuest()) return coop.act({ t: 'act', throw: 1 });
+    hostThrow(false);
+  }
+
+  /** Host: move an item from one chef's paws to the other's. */
+  function hostThrow(byGuest) {
+    const m = coop.mate;
+    const run = (fn) => (byGuest ? withPartner(null, fn) : fn());
+    const giver = byGuest ? m.carry : S.carry;
+    const taker = byGuest ? S.carry : m.carry;
+    const takerName = byGuest ? net.name || 'The host' : m.name;
+    if (!giver) return run(() => nope('Your paws are empty.'));
+    if (taker) return run(() => nope(`${takerName}'s paws are full!`));
+    const busy = byGuest ? !!S.focus : stationList.some((st) => st.lockedBy === 'guest');
+    if (busy) return run(() => nope(`${takerName} is busy at a station.`));
+    const mp = coop.mate.goal;
+    if (Math.hypot(P.x - mp.x, P.z - mp.z) > THROW_RANGE) return run(() => nope(`${takerName} is too far away to catch it.`));
+    const it = giver;
+    const hostHands = myHands(), guestHands = m.handsAt();
+    const [from, to] = byGuest ? [guestHands, hostHands] : [hostHands, guestHands];
+    if (byGuest) {
+      m.carry = null;
+      m.hold(null);
+      toHands(it);
+      heldHideT = 0.5;
+      ui.toast(`${m.name} threw you the ${it.d.name}!`, 'good');
+    } else {
+      S.carry = null;
+      vm.setHeld(null);
+      withPartner(null, () => toHands(it));
+      m.hideHeld(0.5);
+      withPartner(null, () => ui.toast(`${net.name || 'The host'} threw you the ${it.d.name}!`, 'good'));
+    }
+    throwFlight(it, from, to);
+    coop.event({ t: 'throw', id: it.id, to: byGuest ? 'host' : 'guest', from: from.toArray(), at: to.toArray() });
+    coop.flushNow = true;
+  }
+
+  /** Guest: the host says something flew through the air. */
+  function onThrow(e) {
+    const it = coop.itemById(e.id);
+    if (e.to === 'guest') heldHideT = 0.5;
+    else coop.mate.hideHeld(0.5);
+    throwFlight(it, V3(...e.from), V3(...e.at));
+  }
 
   function grabIngredient(t) {
     const ing = ING_BY_ID[t.id];
@@ -1979,9 +2065,9 @@ async function start(hotData = {}) {
 
   // little things flying between spots (a prepped pile hopping into the bowl)
   const flyers = [];
-  function fly(obj, to, dur = 0.45, arc = 0.18, done = null) {
+  function fly(obj, to, dur = 0.45, arc = 0.18, done = null, thrown = false) {
     scene.attach(obj);
-    flyers.push({ obj, from: obj.position.clone(), to: to.clone(), t: 0, dur, arc, s0: obj.scale.x, done });
+    flyers.push({ obj, from: obj.position.clone(), to: to.clone(), t: 0, dur, arc, s0: obj.scale.x, done, thrown });
   }
   function updateFlyers(dt) {
     for (let i = flyers.length - 1; i >= 0; i--) {
@@ -1990,7 +2076,8 @@ async function start(hotData = {}) {
       const e = ease(f.t);
       f.obj.position.lerpVectors(f.from, f.to, e);
       f.obj.position.y += Math.sin(f.t * Math.PI) * f.arc;
-      f.obj.scale.setScalar(f.s0 * (1 - 0.6 * f.t));
+      if (f.thrown) f.obj.rotation.y = f.t * Math.PI * 2;
+      else f.obj.scale.setScalar(f.s0 * (1 - 0.6 * f.t));
       if (f.t >= 1) {
         f.obj.removeFromParent();
         flyers.splice(i, 1);
@@ -2857,6 +2944,7 @@ async function start(hotData = {}) {
       return;
     }
     if (expectUnlock) { expectUnlock = false; return; }
+    if (chatOpen) return;
     if (S.mode === 'play' || S.mode === 'focus') pause();
   };
   input.on.lockError = () => {
@@ -2898,7 +2986,9 @@ async function start(hotData = {}) {
       return;
     }
     if (S.mode !== 'play') return;
-    if (k === 'e' || k === 'enter' || k === ' ') interact();
+    if (k === 'enter' && coop) { e.preventDefault(); openChat(); }
+    else if (k === 'e' || k === 'enter' || k === ' ') interact();
+    else if (k === 't' && coop) throwToMate();
     else if (k === 'r') openBook();
     else if (k === 'b') { if (S.phase === 'morning') openMarket(true); else openBook(); }
     else if (k === 'tab') cycleTicket();
@@ -2976,11 +3066,33 @@ async function start(hotData = {}) {
   }
   pauseEl.addEventListener('click', resume);
   ui.ticketsEl.addEventListener('click', (e) => {
+    const tog = e.target.closest('.ttog');
+    if (tog) {
+      const id = +tog.dataset.tog;
+      if (pinned.has(id)) pinned.delete(id);
+      else pinned.add(id);
+      sfx.pop();
+      return;
+    }
     const t = e.target.closest('.ticket');
     if (!t) return;
     S.activeId = +t.dataset.id;
     sfx.pop();
   });
+
+  // co-op tickets: yours open, your partner's open with their name, and any you pin open
+  const pinned = new Set();
+  function coTickets() {
+    const mateIt = coop.mateCarry();
+    const mateTk = new Set([coop.mate.activeId, mateIt && mateIt.ticket && mateIt.ticket.id].filter(Boolean));
+    for (const id of pinned) if (!S.tickets.some((t) => t.id === id)) pinned.delete(id);
+    return {
+      open: new Set([...pinned, ...mateTk]),
+      owner: (t) => (mateTk.has(t.id) && t.id !== S.activeId ? coop.mate.name : mateTk.has(t.id) ? `+ ${coop.mate.name}` : null),
+      ownerCls: coop.guest ? 'host' : '',
+      paws: (item) => (item === S.carry ? 'in your paws' : `in ${coop.mate.name}'s paws`),
+    };
+  }
   ui.game.palette.addEventListener('click', (e) => {
     const b = e.target.closest('.top');
     if (!b) return;
@@ -3104,13 +3216,16 @@ async function start(hotData = {}) {
     if ($('#streakText').textContent !== st) $('#streakText').textContent = st;
     streakPill.dataset.hot = S.streak >= 5 ? '1' : '0';
     partnerPill.classList.toggle('off', !coop.mate.here);
+    const tb = $('#throwBtn');
+    const canThrow = !!S.carry && S.mode === 'play' && coop.mate.here;
+    if (tb.hidden === canThrow) tb.hidden = !canThrow;
   }
 
   function updateHUD() {
     updateCoopHUD();
     ui.day(S, clockText(), S.phase === 'morning' ? 0 : clamp((S.clock - T_OPEN) / (T_CLOSE - T_OPEN), 0, 1), S.special);
     marketBtn.hidden = !(S.phase === 'morning' && S.mode === 'play');
-    ui.renderTickets(S.tickets, S.activeId);
+    ui.renderTickets(S.tickets, S.activeId, coop ? coTickets() : null);
     ui.updateTicketBars(S.tickets);
     const playing = S.mode === 'play';
     ui.crosshair(playing);
@@ -3273,6 +3388,8 @@ async function start(hotData = {}) {
     renderer.clear();
     renderer.render(scene, cam);
     if (S.mode !== 'title' && S.mode !== 'swoop' && vm.visible) {
+      heldHideT = Math.max(0, heldHideT - raw);
+      if (vm.held) vm.held.visible = heldHideT <= 0;
       vm.update(raw, { moving, speed: 2.9, aspect });
       renderer.clearDepth();
       renderer.render(vm.scene, vm.camera);
@@ -3322,7 +3439,7 @@ async function start(hotData = {}) {
     coop = createCoop({
       S, W, scene, ui, vm, fx, sfx, cam, P, stations, stationList, waiters, BY_ID,
       makeAnimal, animateAnimal, dessertModel, dessertURL, placeItem, refreshBubble, hireWaiters, applyDecor, sign, say,
-      newCustomer, tablePlate, withActor, guestAct, guestFocus, banner,
+      newCustomer, tablePlate, withActor, guestAct, guestFocus, banner, onThrow, eatTo,
       yaw: () => yaw,
       moving: () => lastMoving,
       enterFocus: guestEnterFocus,
@@ -3346,6 +3463,10 @@ async function start(hotData = {}) {
     });
     $('#partnerName').textContent = coop.mate.name;
     partnerPill.classList.toggle('host', coop.guest);
+    document.body.classList.add('coop');
+    chatEl.hidden = false;
+    $('#chatBtn').hidden = false;
+    renderChat();
     $('#leaveCoop').hidden = false;
     pauseEl.querySelector('h2').textContent = 'Quick breather';
     pauseEl.querySelector('.lede').textContent = 'The kitchen keeps going without you! Click anywhere to jump back in.';
@@ -3365,6 +3486,54 @@ async function start(hotData = {}) {
     if (S.mode === 'title') startGame();
   }
   net.on('start', startCoop);
+
+  // ---------------------------------------------------------------- co-op chat
+  const chatEl = $('#chat'), chatLogEl = $('#chatLog'), chatForm = $('#chatForm'), chatIn = $('#chatIn');
+  let chatOpen = false;
+  function renderChat() {
+    const now = Date.now();
+    chatLogEl.innerHTML = net.chat.slice(chatOpen ? -20 : -5).map((m) => chatLine(m).replace('class="cl', `class="cl${now - m.at > 12000 ? ' old' : ''}`)).join('');
+    chatLogEl.scrollTop = chatLogEl.scrollHeight;
+  }
+  setInterval(() => { if (coop && !chatOpen) renderChat(); }, 2000);
+  net.on('chat', (m) => {
+    renderChat();
+    if (!m.mine && coop) sfx.pop();
+  });
+  function openChat() {
+    if (!coop || chatOpen) return;
+    chatOpen = true;
+    input.keys.clear();
+    chatEl.classList.add('open');
+    chatForm.hidden = false;
+    renderChat();
+    chatIn.focus();
+  }
+  function closeChat() {
+    if (!chatOpen) return;
+    chatOpen = false;
+    chatEl.classList.remove('open');
+    chatForm.hidden = true;
+    chatIn.blur();
+    renderChat();
+  }
+  chatIn.addEventListener('keydown', (e) => {
+    e.stopPropagation();
+    if (e.key === 'Escape') { e.preventDefault(); closeChat(); }
+  });
+  chatIn.addEventListener('keyup', (e) => e.stopPropagation());
+  chatForm.addEventListener('submit', (e) => {
+    e.preventDefault();
+    net.say(chatIn.value);
+    chatIn.value = '';
+    closeChat();
+  });
+  $('#chatBtn').addEventListener('click', () => {
+    if (input.locked) expectUnlock = true;
+    input.exitLock();
+    openChat();
+  });
+  $('#throwBtn').addEventListener('click', () => throwToMate());
   $('#leaveCoop').addEventListener('click', (e) => {
     e.stopPropagation();
     leaveRoom();
@@ -3390,6 +3559,7 @@ async function start(hotData = {}) {
     net, leaveRoom,
     interact, spawnCustomer, startGame, enterFocus, focusTap, focusAlt, pickLayer, selectTopping, completeFocus, leaveFocus, openBook, closeBook,
     __tickDay: (dt) => withActor('world', () => updateDay(dt)),
+    tablePlate,
     openShop, closeShop, endDay, openMarket, closeMarket, shop, decorPieces, sign,
     desserts: DESSERTS,
     give: (id, step = 0) => {

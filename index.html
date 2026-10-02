@@ -587,6 +587,41 @@ body[data-mode="title"] .coop-hud, body[data-mode="swoop"] .coop-hud, body[data-
 .bubble.ping.guest { background: #86BADB; }
 .bubble.ping.host { background: var(--pinkDeep); }
 .coop-wait { margin: 12px 0 0; font-size: 15px; font-weight: 600; }
+/* chat: in the lobby card, and over the kitchen in co-op */
+.chatbox { border: 2.5px solid var(--ink); border-radius: 16px; background: #fff; overflow: hidden; }
+.chatlog { max-height: 140px; overflow-y: auto; padding: 6px 10px; font-size: 14px; line-height: 1.35; -webkit-user-select: text; user-select: text; }
+.cl { margin: 2px 0; overflow-wrap: anywhere; }
+.cl b { color: #3E5C76; }
+.cl.mine b { color: #B4541E; }
+.cl.empty { opacity: .6; }
+.chatform { display: flex; gap: 6px; padding: 6px; border-top: 2px solid #F0E2C8; }
+.chatform input { flex: 1; min-width: 0; font: 500 15px/1.2 var(--font); color: var(--ink); border: 2.5px solid var(--ink); border-radius: 12px; padding: 6px 10px; background: #fff; -webkit-user-select: text; user-select: text; }
+#chat { position: absolute; left: 16px; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); width: min(340px, calc(100% - 32px)); z-index: 6; pointer-events: none; }
+#chat .chatlog { max-height: 150px; overflow: hidden; padding: 0; background: none; display: flex; flex-direction: column; justify-content: flex-end; }
+#chat .cl { align-self: flex-start; background: rgba(255, 248, 234, .92); border: 2px solid rgba(75, 46, 29, .5); border-radius: 12px; padding: 3px 9px; margin: 3px 0; transition: opacity .6s; }
+#chat .cl.old { opacity: 0; }
+#chat.open { pointer-events: auto; }
+#chat.open .cl.old { opacity: 1; }
+#chat.open .chatlog { overflow-y: auto; max-height: 200px; }
+#chat .chatform { margin-top: 4px; background: rgba(255, 248, 234, .95); border: 2.5px solid var(--ink); border-radius: 16px; }
+body.coop #tickets { max-height: calc(100% - 250px); }
+.bubble.say.chat { background: #EAF4FB; }
+@media (pointer: coarse) {
+  #chat { bottom: calc(166px + env(safe-area-inset-bottom, 0px)); }
+  .throw { position: absolute; right: 120px; bottom: calc(52px + env(safe-area-inset-bottom, 0px)); width: 70px; height: 70px; padding: 0; font-size: 16px; border-radius: 50%; background: #86BADB; }
+}
+body[data-mode="title"] #chat, body[data-mode="swoop"] #chat { display: none; }
+
+/* co-op tickets: more than one recipe open, and whose is whose */
+.ticket.open:not(.active) { background: #F6FBFE; }
+.ticket.open:not(.active) .tsteps li.done { display: none; }
+.towner { flex: none; margin-left: auto; font-size: 11.5px; font-weight: 700; padding: 1px 8px 2px; border-radius: 99px; border: 2px solid var(--ink); background: #86BADB; white-space: nowrap; }
+.towner.host { background: var(--pinkDeep); }
+.tq + .towner { margin-left: 4px; }
+.ttog { flex: none; margin-left: 4px; width: 26px; height: 26px; padding: 0; border-radius: 50%; border: 2px solid var(--ink); background: #fff; font: 700 13px/1 var(--font); color: var(--ink); cursor: pointer; }
+.ttog:hover { background: var(--butter); }
+.towner + .ttog, .tq + .ttog { margin-left: 4px; }
+.tname + .ttog { margin-left: auto; }
 
 /* ------------------------------------------------ touch */
 .touch { display: none; }
@@ -675,6 +710,7 @@ body[data-mode="title"] .coop-hud, body[data-mode="swoop"] .coop-hud, body[data-
     <button class="btn primary" id="marketBtn" type="button" hidden>Market <kbd>B</kbd></button>
     <div class="pill" id="coinPill" title="Coins"><span class="coin-ico" aria-hidden="true"></span><b id="coins">0</b></div>
     <div class="pill" title="Treats served"><span class="heart-ico" aria-hidden="true"></span><b id="served">0</b><small>served</small></div>
+    <button class="btn" id="chatBtn" type="button" hidden>Chat <kbd>↵</kbd></button>
     <button class="btn" id="bookBtn" type="button">Recipes</button>
     <button class="btn" id="muteBtn" type="button">Sound on</button>
   </div>
@@ -684,6 +720,10 @@ body[data-mode="title"] .coop-hud, body[data-mode="swoop"] .coop-hud, body[data-
     <div class="pill partner-pill" id="partnerPill" hidden><i aria-hidden="true"></i><b id="partnerName">Partner</b></div>
     <div class="pill rush" id="rushPill" hidden title="How busy it is. It gets busier as the day goes on."><b id="rushText">Calm</b><span class="rbar"><i id="rushBar"></i></span></div>
     <div class="pill streak" id="streakPill" hidden title="Serve orders in a row to raise the team bonus"><b id="streakText">×1.0</b><small>streak</small></div>
+  </div>
+  <div id="chat" hidden>
+    <div class="chatlog" id="chatLog" aria-live="polite"></div>
+    <form class="chatform" id="chatForm" hidden><input type="text" id="chatIn" maxlength="140" placeholder="Say something… (Enter to send, Esc to close)" autocomplete="off" aria-label="Chat message"><button class="btn small" type="submit">Send</button></form>
   </div>
   <div id="carry" hidden></div>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
@@ -712,6 +752,7 @@ body[data-mode="title"] .coop-hud, body[data-mode="swoop"] .coop-hud, body[data-
   <div class="touch" id="touch">
     <div class="stick" id="stick"><div class="knob" id="knob"></div></div>
     <button class="btn primary use" id="useBtn" type="button">Use</button>
+    <button class="btn throw" id="throwBtn" type="button" hidden>Throw</button>
   </div>
 
   <div class="modal" id="book" hidden>
@@ -767,6 +808,8 @@ body[data-mode="title"] .coop-hud, body[data-mode="swoop"] .coop-hud, body[data-
         <li><kbd>Q</kbd> step back</li>
         <li><kbd>B</kbd> market (mornings)</li>
         <li><kbd>G</kbd> ping (co-op)</li>
+        <li><kbd>T</kbd> throw to partner</li>
+        <li><kbd>Enter</kbd> chat</li>
       </ul>
       <button class="btn" id="leaveCoop" type="button" hidden>Leave the co-op room</button>
     </div>
@@ -812,6 +855,11 @@ body[data-mode="title"] .coop-hud, body[data-mode="swoop"] .coop-hud, body[data-
           <p class="diff-desc" id="diffDesc"></p>
         </div>
         <button class="btn primary big" id="lobbyStart" type="button">Start the day</button>
+        <h3>Chat</h3>
+        <div class="chatbox">
+          <div class="chatlog" id="lobbyChatLog" aria-live="polite"></div>
+          <form class="chatform" id="lobbyChatForm"><input type="text" id="lobbyChatIn" maxlength="140" placeholder="Say something…" autocomplete="off" aria-label="Chat message"><button class="btn small" type="submit">Send</button></form>
+        </div>
       </div>
       <p class="lobby-status" id="lobbyStatus" role="status"></p>
       <div class="lobby-foot"><button class="btn" id="lobbyBack" type="button">Back</button></div>
