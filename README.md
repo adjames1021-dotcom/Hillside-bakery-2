@@ -2,6 +2,8 @@
 
 A cozy first-person baking game in a toon bakery. You're a little fox baker running a shop day by day: take orders from chibi cat, bunny, bear and puppy customers, gather and prep ingredients from **Dry Storage** and **Cold Storage**, work each recipe card step by step at the kitchen stations and the center **prep island**, then serve the finished dessert at their table. After closing, spend your coins at the **morning market** on restocks, kitchen upgrades and decor.
 
+Pick a kitchen on the title screen: the **Hillside Bakery**, or **Lantern Cliff**, a fancy seaside restaurant where waiters take the orders and carry your plates out to the tables. Play alone, or with a friend in **two-chef co-op** (see [Co-op](#co-op-with-a-friend)).
+
 The full design brief is in [PROMPT.md](PROMPT.md).
 
 ## Play
@@ -24,6 +26,7 @@ python3 -m http.server 8000
 | Left / right (lattice, crisscross) | A / D or arrow keys | **Left** / **Right** |
 | Pick a layer | 1–9 | Tap the layer |
 | Step back from a station | Q | **Step back** |
+| Ping a spot for your co-op partner | G | |
 
 ## A day at the bakery
 
@@ -33,6 +36,43 @@ python3 -m http.server 8000
 4. **Morning market.** Restock the pantry (every grab uses one ingredient from the shelf), buy upgrades such as a Speedy Oven, Oven Thermometer, Stand Mixer, Sharp Knife, Copper Pot, Frosty Freezer, Comfy Cushions, Tip Jar or Bigger Shelves, and buy decor that shows up in the shop: sunflowers, paper lanterns, hanging ferns, a specials chalkboard and a shop cat.
 
 New menu sections join on later days: Pies and Cookies on day 1, Pastries on day 2, Cakes on day 3, Cold & Frozen on day 4, Candy & Campfire on day 5. Coins, stock, upgrades and decor are saved in the browser.
+
+## Lantern Cliff, the restaurant
+
+An open kitchen on a cliff above the sea at sunset, with a lighthouse, sailboats and lanterns outside the glass walls. Guests come in through the door, a waiter (Pierre or Lulu, plus Basil if you hire him) takes their order at the table and walks the ticket back to **the pass**. You cook from the Pantry and the Cold Room, then set the finished plate on the pass and a waiter carries it out. The menu has 21 dishes: Starters & Soups and Pasta & Risotto on day 1, From the Sea on day 2, From the Grill on day 3, Desserts on day 4, and Chef's Signatures on day 5. It has its own market: a Stone Hearth Oven, Probe Thermometer, Pro Blender, Japanese Knife Set, Copper Cookware, Turbo Chiller, Third Waiter, Quick Runners, Velvet Chairs, a Maître d' (tips) and a Walk-in Pantry, plus table candles, roses, a grand piano, a chef's menu board and a crystal chandelier. Each kitchen keeps its own save.
+
+## Co-op with a friend
+
+Two chefs share one kitchen over the internet. On the title screen, press **Co-op with a friend**, type a name and **Create a room**. Send your friend the four-letter room code (or the invite link); they press **Co-op with a friend**, type the code and **Join**.
+
+In the lobby the host picks:
+
+- **The kitchen:** Hillside Bakery or Lantern Cliff. Switching reloads both players into the new kitchen and they rejoin the room automatically.
+- **Difficulty:** a slider from Cozy to Frantic. It sets how patient the guests are, how fast they arrive, how many come at once, how hard the rush hits, how much a walkout costs and how well the day pays (Busy pays 20% more, Frantic 40%).
+
+Then **Start the day together**. The day works like a busy service:
+
+- It starts calm and gets busier through the day. Three **rush waves** (lunch, afternoon and a final rush; sunset and dinner at Lantern Cliff) come with a big banner, a burst of guests, shorter patience and more two-dish orders. The **rush meter** on the right, under the top bar, shows Calm, Busy, Rush! or Frantic!.
+- Serve guests in a row to build a team **streak** (up to ×1.4 coins). A guest who gives up and leaves breaks the streak and costs the team coins.
+- Only one chef can work a station's close-up at a time. Your partner is a fox with a name tag, and you can see what they're carrying. Press **G** to ping the spot you're looking at.
+- The kitchen keeps running when either chef pauses. The day summary adds a team rating (1–3 stars).
+- The host runs the morning market and keeps the progress (coins, day, upgrades) in their save.
+
+### Running the co-op server (Cloudflare Workers)
+
+Rooms run on a small Cloudflare Worker with a Durable Object per room (`server/worker.js`). The same Worker also serves the game, so the simplest setup is to deploy it and play from its address:
+
+```sh
+npx wrangler login
+npx wrangler deploy
+# then open https://hillside-bakery.<your-subdomain>.workers.dev
+```
+
+The free Workers plan is enough for this. To try it locally, run `npx wrangler dev --persist-to /tmp/hillside-rooms` and open http://localhost:8787 in two browser windows. Keeping the room state outside the project folder stops the dev server from reloading itself.
+
+If you host the game files somewhere else (GitHub Pages, a claude.ai artifact, `python3 -m http.server`), open **Co-op server** in the lobby and paste your Worker's address, or set `DEFAULT_SERVER` in `src/net.js`. Invite links carry the address along.
+
+How it works: the host's browser runs the kitchen (customers, timers, coins) and sends a snapshot of it about ten times a second. The guest's browser rebuilds the kitchen from those snapshots and sends its actions back for the host to carry out, so both always see the same tickets and plates. The guest plays station mini-games locally and reports the result. The Worker only relays messages and remembers the lobby (host, kitchen, difficulty).
 
 ## How a recipe works
 
@@ -73,7 +113,12 @@ New menu sections join on later days: Pies and Cookies on day 1, Pastries on day
 ## Files
 
 - `index.html`: page, HUD, tickets, mini-game card, recipe book and styles
-- `src/main.js`: game loop, first-person camera, targeting, orders, stations, the shop day, customers
+- `src/main.js`: game loop, first-person camera, targeting, orders, stations, the shop day, customers, waiters, the co-op rush
+- `src/venue.js`: which kitchen you're in (bakery or restaurant) and the words that differ
+- `src/restaurant.js`, `src/rest_data.js`, `src/rest3d.js`: Lantern Cliff's world, menu, ingredients, upgrades and 3D dishes
+- `src/net.js`: co-op lobby, room connection and difficulty settings
+- `src/coop.js`: co-op sync: host snapshots, the guest's mirror of the kitchen, the partner's avatar and pings
+- `server/worker.js`, `wrangler.toml`: the Cloudflare Worker and Durable Object that host co-op rooms
 - `src/minigames.js`: the station mini-games (tap, timing, pour, circles, side to side, left/right, layers, roll, hold); circles are tracked around a center that trails the pointer, so any size or direction counts
 - `src/shop.js`, `src/shopIcons.js`: day summary, morning market, prices, upgrades and decor icons
 - `src/decor.js`: buyable decor pieces and the Open/Closed door sign

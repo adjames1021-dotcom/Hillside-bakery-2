@@ -1,0 +1,7 @@
+server
+wrangler.toml
+.assetsignore
+.git
+.wrangler
+node_modules
+*.md

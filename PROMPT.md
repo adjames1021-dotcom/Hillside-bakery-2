@@ -1,6 +1,6 @@
-# Hillside Bakery: game prompt (v4)
+# Hillside Bakery: game prompt (v5)
 
-An improved version of the original prompt. It asks for a first-person game, a real pantry with Dry and Cold Storage, a center prep island, deep step-by-step recipes with ingredient prep and signature mini-games, stations whose tools visibly do the work, custom orders, a day-by-day shop loop with a morning market, and detailed clay-miniature food with nothing clipping. The game in this repository is built from it.
+An improved version of the original prompt. It asks for a first-person game, a real pantry with Dry and Cold Storage, a center prep island, deep step-by-step recipes with ingredient prep and signature mini-games, stations whose tools visibly do the work, custom orders, a day-by-day shop loop with a morning market, detailed clay-miniature food with nothing clipping, a second venue (a seaside restaurant with waiters), and two-player online co-op with a rush that builds through the day. The game in this repository is built from it.
 
 ---
 
@@ -122,6 +122,22 @@ Rules:
 - Customers wave and turn their heads to look at you when you're close. They eat in three bites with hearts, then leave.
 - Coins depend on recipe length, stars, remaining patience, special requests, the daily special, decor bonuses and the tip jar.
 - Early orders on day 1 favour short recipes. At most 2 customers at once, rising to 4 by day 3.
+
+## A second kitchen: Lantern Cliff
+
+- The title card has a venue picker: **Hillside Bakery** or **Lantern Cliff**. Each venue has its own world, menu, ingredients, upgrades, decor and save. Switching reloads the page into the other kitchen.
+- **Lantern Cliff** is a fancy open kitchen on a cliff above the sea at sunset: a checkered kitchen floor, a walnut dining room with white tablecloths, navy walls, copper and marble stations, glass walls looking out at the sea, a lighthouse, islands, sailboats and lanterns.
+- **Waiters** in vests and bow ties (Pierre and Lulu, and a third with an upgrade) do the front of house. A waiter walks to a seated guest, bows while writing the order, carries the ticket to **the pass** (a counter between kitchen and dining room), and the ticket appears in the kitchen. The chef cooks and sets the finished plate on the pass; a waiter picks it up on a tray, carries it to the right table and serves it. You can watch them walk the room.
+- 21 dishes in six sections: Starters & Soups and Pasta & Risotto (day 1), From the Sea (2), From the Grill (3), Desserts (4) and Chef's Signatures (5). Searing and frying turn the food into the dish right there in the pan. Plating replaces decorating, with garnishes such as herbs, basil, parmesan, pepper, olive oil, balsamic, edible flowers and berries.
+- Its own market: Stone Hearth Oven, Probe Thermometer, Pro Blender, Japanese Knife Set, Copper Cookware, Turbo Chiller, Third Waiter, Quick Runners, Velvet Chairs, Maître d' and Walk-in Pantry; decor of table candles, roses, a grand piano, a chef's menu board and a crystal chandelier.
+
+## Two-chef co-op (Cloudflare Workers)
+
+- **Co-op with a friend** on the title card opens a lobby: type a name, create a room (a four-letter code and an invite link) or join one. Two chefs per room.
+- The host picks the **kitchen** (both players reload into it and rejoin automatically) and the **difficulty** with a five-step slider (Cozy, Easy, Normal, Busy, Frantic) that sets guest patience, arrival rate, how many guests come at once, how hard the rush hits, the walkout penalty and the coin bonus. The guest sees the choices live. **Start the day together** starts both games.
+- **Like a busy service, the rush builds.** The day starts calm and gets busier as the clock runs; three rush waves (lunch, afternoon and a final rush, or sunset and dinner at the restaurant) arrive with a big banner, a burst of guests, shorter patience and more two-dish orders. A rush meter shows Calm, Busy, Rush! or Frantic!. Last orders get their own banner.
+- Mechanics that make two chefs work: one chef per station close-up (the other gets "Bo is working at the Prep Island"); a team **streak** that raises coins up to ×1.4 for guests served in a row; a **walkout penalty** that costs coins and breaks the streak; a **ping** (G) that drops a marker on whatever you're looking at; the partner shown as a fox with a name tag carrying what they carry; a kitchen that keeps running when one chef pauses; and a team rating on the day summary. The host runs the morning market and keeps the save; the guest waits on the summary card.
+- **Networking:** a Cloudflare Worker serves the game and a Durable Object per room (WebSocket hibernation API) keeps the lobby and relays messages. The host's browser is authoritative: it runs customers, timers and coins and sends a compact snapshot about ten times a second. The guest's browser mirrors that kitchen and sends its actions (with a sequence number) for the host to run as the guest, with the guest's paws and selected ticket. The guest's sounds and messages go back to the guest. Station mini-games run on the guest's screen and report the result. The guest ignores snapshots until the host has handled its latest action, so nothing flickers back.
 
 ## Art direction
 

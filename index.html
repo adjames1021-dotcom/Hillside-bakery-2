@@ -520,6 +520,74 @@ body[data-mode="summary"] #tickets, body[data-mode="market"] #tickets,
 body[data-mode="summary"] .hud-top, body[data-mode="market"] .hud-top { display: none; }
 body[data-mode="focus"] #carry { display: none; }
 
+
+/* ------------------------------------------------ co-op lobby */
+.title-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; }
+.lobby-card { width: min(540px, 100%); text-align: left; max-height: calc(100vh - 32px); overflow: auto; }
+.lobby-card .eyebrow, .lobby-card h2 { text-align: center; }
+.lobby-card h3 { margin: 14px 0 6px; font-size: 16px; display: flex; justify-content: space-between; align-items: baseline; }
+.field { display: grid; gap: 4px; font-size: 14px; font-weight: 600; margin: 0 0 12px; }
+.lobby-card input[type="text"] {
+  font: 500 17px/1.2 var(--font); color: var(--ink); background: #fff; border: 3px solid var(--ink); border-radius: 14px;
+  padding: 9px 12px; width: 100%; box-sizing: border-box; -webkit-user-select: text; user-select: text;
+}
+.lobby-card input[type="text"]:focus-visible { outline: 3px solid var(--pumpkin); outline-offset: 2px; }
+.join-row { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center; }
+#lobbyCode { text-transform: uppercase; letter-spacing: .14em; }
+.or { text-align: center; font-size: 13px; font-weight: 600; opacity: .7; margin: 12px 0 8px; }
+.lobby-card .btn.big { width: 100%; }
+.lobby-card details { margin-top: 12px; font-size: 13px; }
+.lobby-card summary { cursor: pointer; font-weight: 600; opacity: .8; }
+.lobby-card details small { display: block; opacity: .7; margin-top: 4px; line-height: 1.35; }
+.lobby-card details input { margin-top: 6px; font-size: 14px !important; }
+.room-code { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; background: var(--butter); border: 3px solid var(--ink); border-radius: 16px; padding: 8px 12px; }
+.room-code b { font-size: 26px; letter-spacing: .16em; }
+.chefs { list-style: none; margin: 10px 0 0; padding: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.chefs li { display: flex; align-items: center; gap: 8px; background: #fff; border: 2.5px solid var(--ink); border-radius: 14px; padding: 7px 10px; font-weight: 600; min-width: 0; }
+.chefs li span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chefs li small { margin-left: auto; font-size: 11.5px; opacity: .7; font-weight: 500; }
+.chefs li.empty { border-style: dashed; opacity: .6; font-weight: 500; }
+.chefs i { flex: none; width: 22px; height: 22px; border-radius: 50%; border: 2px solid var(--ink); background: var(--pinkDeep); }
+.chefs li.guest i { background: #86BADB; }
+#lobbyMaps { margin: 0; }
+#lobbyMaps .venue[disabled] { cursor: default; }
+.diff { display: grid; gap: 4px; }
+.diff input[type="range"] { width: 100%; accent-color: var(--pumpkin); height: 28px; }
+.diff-ticks { display: flex; justify-content: space-between; font-size: 11.5px; opacity: .7; }
+.diff-desc { margin: 2px 0 0; font-size: 13.5px; line-height: 1.35; min-height: 2.7em; }
+.lobby-status { text-align: center; font-size: 14px; margin: 12px 0 0; min-height: 1.2em; }
+.lobby-status.bad { color: #B8402A; font-weight: 600; }
+.lobby-foot { display: flex; justify-content: center; gap: 10px; margin-top: 10px; }
+#lobbyStart { margin-top: 14px; }
+
+/* ------------------------------------------------ co-op HUD */
+.coop-hud { position: absolute; right: 16px; top: calc(68px + env(safe-area-inset-top, 0px)); display: flex; flex-direction: column; align-items: flex-end; gap: 8px; pointer-events: none; }
+.coop-hud .pill { box-shadow: 0 3px 0 var(--ink); padding-top: 4px; padding-bottom: 4px; }
+@media (max-width: 980px) { .coop-hud { top: calc(116px + env(safe-area-inset-top, 0px)); } }
+body[data-mode="title"] .coop-hud, body[data-mode="swoop"] .coop-hud, body[data-mode="summary"] .coop-hud, body[data-mode="market"] .coop-hud, body[data-mode="focus"] .coop-hud { display: none; }
+.rush { display: inline-flex; align-items: center; gap: 8px; padding: 5px 12px 5px 10px; }
+.rush b { font-size: 14px; min-width: 0; }
+.rush .rbar { width: 70px; height: 10px; border: 2px solid var(--ink); border-radius: 99px; background: #fff; overflow: hidden; }
+.rush .rbar i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--sage), var(--butter) 45%, var(--orange) 70%, #E0553A); background-size: 70px 100%; transition: width .4s; }
+.rush[data-level="3"] { animation: rushPulse 1s ease-in-out infinite; }
+@keyframes rushPulse { 50% { transform: scale(1.06); } }
+.streak b { font-size: 15px; }
+.streak[data-hot="1"] { background: var(--butter); }
+.partner-pill { gap: 6px; padding-left: 6px; }
+.partner-pill i { width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--ink); background: #86BADB; }
+.partner-pill.off { opacity: .55; }
+.partner-pill.host i { background: var(--pinkDeep); }
+#banner { position: absolute; left: 50%; top: 26%; transform: translate(-50%, -50%) scale(.6); opacity: 0; pointer-events: none; z-index: 9; text-align: center; transition: transform .35s cubic-bezier(.3, 1.6, .5, 1), opacity .3s; }
+#banner.show { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+#banner b { display: block; font-size: clamp(34px, 7vw, 60px); line-height: 1; color: var(--butter); -webkit-text-stroke: 7px var(--ink); paint-order: stroke fill; text-shadow: 0 5px 0 var(--ink); white-space: nowrap; }
+#banner small { display: inline-block; margin-top: 10px; font-size: 16px; font-weight: 600; background: var(--cream2); border: 3px solid var(--ink); border-radius: 99px; padding: 4px 14px; }
+.bubble.name { background: #86BADB; color: var(--ink); font-weight: 600; font-size: 14px; padding: 3px 10px; border-radius: 99px; border: 2.5px solid var(--ink); white-space: nowrap; }
+.bubble.name.host { background: var(--pinkDeep); }
+.bubble.ping { font-size: 26px; line-height: 1; background: var(--butter); border: 3px solid var(--ink); border-radius: 50% 50% 50% 0; transform-origin: 0 100%; width: 34px; height: 34px; display: grid; place-items: center; font-weight: 700; }
+.bubble.ping.guest { background: #86BADB; }
+.bubble.ping.host { background: var(--pinkDeep); }
+.coop-wait { margin: 12px 0 0; font-size: 15px; font-weight: 600; }
+
 /* ------------------------------------------------ touch */
 .touch { display: none; }
 @media (pointer: coarse) {
@@ -554,6 +622,8 @@ body[data-mode="focus"] #carry { display: none; }
   .pill small { display: none; }
   .special-pill span { display: none; }
   .hud-top { left: auto; right: 16px; transform: none; top: calc(112px + env(safe-area-inset-top, 0px)); gap: 6px; flex-direction: column; align-items: flex-end; }
+  .coop-hud { top: calc(218px + env(safe-area-inset-top, 0px)); gap: 6px; }
+  .rush .rbar { width: 44px; }
   body[data-mode="focus"] #tickets { display: none; }
   body[data-mode="focus"] .toast { top: calc(12px + env(safe-area-inset-top, 0px)); bottom: auto; }
   .day-pill b { font-size: 13px; }
@@ -610,8 +680,14 @@ body[data-mode="focus"] #carry { display: none; }
   </div>
   </div>
 
+  <div class="coop-hud" id="coopHud">
+    <div class="pill partner-pill" id="partnerPill" hidden><i aria-hidden="true"></i><b id="partnerName">Partner</b></div>
+    <div class="pill rush" id="rushPill" hidden title="How busy it is. It gets busier as the day goes on."><b id="rushText">Calm</b><span class="rbar"><i id="rushBar"></i></span></div>
+    <div class="pill streak" id="streakPill" hidden title="Serve orders in a row to raise the team bonus"><b id="streakText">×1.0</b><small>streak</small></div>
+  </div>
   <div id="carry" hidden></div>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <div id="banner" aria-live="assertive"><b id="bannerText"></b><small id="bannerSub"></small></div>
 
   <section id="game" hidden aria-live="polite">
     <p class="game-station" id="gameStation"></p>
@@ -690,10 +766,57 @@ body[data-mode="focus"] #carry { display: none; }
         <li><kbd>R</kbd> recipes</li>
         <li><kbd>Q</kbd> step back</li>
         <li><kbd>B</kbd> market (mornings)</li>
+        <li><kbd>G</kbd> ping (co-op)</li>
       </ul>
+      <button class="btn" id="leaveCoop" type="button" hidden>Leave the co-op room</button>
     </div>
   </div>
 
+
+  <div class="overlay" id="lobby" hidden>
+    <div class="card-big lobby-card" role="dialog" aria-modal="true" aria-labelledby="lobbyTitle">
+      <p class="eyebrow">Two chefs, one kitchen</p>
+      <h2 id="lobbyTitle">Co-op</h2>
+      <div id="lobbyJoin">
+        <label class="field"><span>Your chef name</span><input type="text" id="lobbyName" maxlength="16" autocomplete="nickname" spellcheck="false"></label>
+        <button class="btn primary big" id="lobbyCreate" type="button">Create a room</button>
+        <p class="or">or join a friend's room</p>
+        <div class="join-row">
+          <input type="text" id="lobbyCode" placeholder="Room code" maxlength="6" autocomplete="off" spellcheck="false" aria-label="Room code">
+          <button class="btn" id="lobbyJoinBtn" type="button">Join</button>
+        </div>
+        <details id="lobbyServerBox">
+          <summary>Co-op server</summary>
+          <input type="text" id="lobbyServer" placeholder="https://hillside-bakery.you.workers.dev" spellcheck="false" aria-label="Co-op server address">
+          <small>Rooms run on a Cloudflare Worker (see the README). Leave this empty when you opened the game from the Worker's own address.</small>
+        </details>
+      </div>
+      <div id="lobbyRoom" hidden>
+        <div class="room-code"><span>Room <b id="roomCode">----</b></span><button class="btn small" id="copyLink" type="button">Copy invite link</button></div>
+        <ul class="chefs" id="lobbyChefs"></ul>
+        <h3>Kitchen</h3>
+        <div class="venues" id="lobbyMaps" role="radiogroup" aria-label="Which kitchen">
+          <button class="venue" type="button" role="radio" data-map="bakery" aria-checked="false">
+            <span class="vico vico-bakery" aria-hidden="true"></span>
+            <span><b>Hillside Bakery</b><small>Cozy · 4 seats · 50 desserts</small></span>
+          </button>
+          <button class="venue" type="button" role="radio" data-map="restaurant" aria-checked="false">
+            <span class="vico vico-restaurant" aria-hidden="true"></span>
+            <span><b>Lantern Cliff</b><small>Seaside · 8 seats · waiters</small></span>
+          </button>
+        </div>
+        <h3><span>Difficulty</span><b id="diffName">Normal</b></h3>
+        <div class="diff">
+          <input type="range" id="lobbyDiff" min="1" max="5" step="1" value="3" aria-describedby="diffDesc" aria-label="Difficulty">
+          <div class="diff-ticks" aria-hidden="true"><span>Cozy</span><span>Easy</span><span>Normal</span><span>Busy</span><span>Frantic</span></div>
+          <p class="diff-desc" id="diffDesc"></p>
+        </div>
+        <button class="btn primary big" id="lobbyStart" type="button">Start the day</button>
+      </div>
+      <p class="lobby-status" id="lobbyStatus" role="status"></p>
+      <div class="lobby-foot"><button class="btn" id="lobbyBack" type="button">Back</button></div>
+    </div>
+  </div>
   <div class="overlay" id="title">
     <div class="card-big">
       <p class="eyebrow" id="titleEyebrow">A first-person baking game</p>
@@ -716,7 +839,10 @@ body[data-mode="focus"] #carry { display: none; }
         <li><kbd>1</kbd>–<kbd>4</kbd> tickets</li>
         <li><kbd>R</kbd> recipes</li>
       </ul>
-      <button class="btn primary big" id="startBtn" type="button">Open the shop</button>
+      <div class="title-actions">
+        <button class="btn primary big" id="startBtn" type="button">Open the shop</button>
+        <button class="btn big" id="coopBtn" type="button">Co-op with a friend</button>
+      </div>
       <p class="note">Progress is saved in this browser.</p>
     </div>
   </div>

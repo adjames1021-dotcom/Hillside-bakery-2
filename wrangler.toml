@@ -1,0 +1,17 @@
+# Deploy with:  npx wrangler deploy
+# Serves the game and hosts the two-player co-op rooms.
+name = "hillside-bakery"
+main = "server/worker.js"
+compatibility_date = "2025-09-01"
+
+[assets]
+directory = "."
+binding = "ASSETS"
+
+[[durable_objects.bindings]]
+name = "ROOMS"
+class_name = "Room"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Room"]

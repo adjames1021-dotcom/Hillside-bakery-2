@@ -6,7 +6,8 @@ const KEY = 'hillside-venue';
 const VENUES = ['bakery', 'restaurant'];
 
 function detect() {
-  const hash = (typeof location !== 'undefined' && location.hash || '').replace('#', '');
+  // the hash can also carry a co-op room: #restaurant&room=ABCD
+  const hash = (typeof location !== 'undefined' && location.hash || '').replace('#', '').split('&')[0];
   if (VENUES.includes(hash)) return hash;
   try {
     const v = localStorage.getItem(KEY);
@@ -18,12 +19,14 @@ function detect() {
 export const VENUE = detect();
 export const IS_RESTAURANT = VENUE === 'restaurant';
 
-export function switchVenue(v) {
+export function switchVenue(v, extra = '') {
   if (!VENUES.includes(v) || v === VENUE) return;
   try { localStorage.setItem(KEY, v); } catch { /* the hash still carries it */ }
-  location.hash = v;
+  location.hash = v + extra;
   location.reload();
 }
+
+export const MAPS = VENUES;
 
 /** Words and places that differ between the two venues. */
 export const WORDS = IS_RESTAURANT
